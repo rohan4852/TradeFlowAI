@@ -1,0 +1,63 @@
+{
+    "defaults": {
+        "timeout": 30000,
+        "wait": 2000,
+        "chromeLaunchConfig": {
+            "executablePath": null,
+            "ignoreHTTPSErrors": false,
+            "args": [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu"
+            ]
+        },
+        "standard": "WCAG2AA",
+        "level": "error",
+        "threshold": 0,
+        "includeNotices": false,
+        "includeWarnings": true,
+        "ignore": [
+            "color-contrast-enhanced",
+            "region"
+        ],
+        "rules": [
+            "color-contrast",
+            "keyboard",
+            "label",
+            "landmark",
+            "heading-order",
+            "focus-order-semantics",
+            "aria-valid-attr-value",
+            "aria-valid-attr",
+            "aria-labelledby",
+            "aria-describedby",
+            "button-name",
+            "link-name",
+            "image-alt",
+            "input-image-alt",
+            "form-field-multiple-labels",
+            "frame-title",
+            "duplicate-id",
+            "meta-refresh",
+            "meta-viewport"
+        ],
+        "reporters": [
+            "cli",
+            "json"
+        ],
+        "actions": [
+            "wait for element body to be visible",
+            "set field #search to trading",
+            "click element #search-button",
+            "wait for element .results to be visible"
+        ]
+    },
+    "urls": [
+        "http://localhost:5173",
+        "http://localhost:5173/dashboard",
+        "http://localhost:5173/charts",
+        "http://localhost:5173/portfolio",
+        "http://localhost:5173/settings"
+    ]
+}

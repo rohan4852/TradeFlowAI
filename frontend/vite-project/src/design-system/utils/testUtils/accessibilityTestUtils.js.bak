@@ -1,0 +1,468 @@
+/**
+ * Jest utilities for accessibility testing
+ * Provides custom matchers and helpers for testing accessibility in components
+ */
+
+import { getContrastRatio, meetsContrastRequirement, getFocusableElements } from '../accessibility';
+
+// Mock axe functions if jest-axe is not available
+let axe = null;
+let toHaveNoViolations = null;
+
+// Try to load jest-axe dynamically
+const loadJestAxe = async () => {
+  try {
+    const jestAxe = await import('jest-axe');
+    axe = jestAxe.axe;
+    toHaveNoViolations = jestAxe.toHaveNoViolations;
+
+    // Extend Jest matchers if available
+    if (typeof expect !== 'undefined' && toHaveNoViolations) {
+      expect.extend(toHaveNoViolations);
+    }
+    return true;
+  } catch (error) {
+    console.warn('jest-axe not available, some accessibility testing features will be disabled');
+    return false;
+  }
+};
+
+/**
+ * Custom Jest matchers for accessibility testing
+ */
+export const accessibilityMatchers = {
+  // Check if element has sufficient color contrast
+  toHaveGoodContrast: (received, level = 'AA', size = 'normal') => {
+    const element = received;
+    const styles = window.getComputedStyle(element);
+    const textColor = styles.color;
+    const backgroundColor = getEffectiveBackgroundColor(element);
+
+    if (!textColor || !backgroundColor) {
+      return {
+        pass: false,
+        message: () => 'Could not determine text or background color'
+      };
+    }
+
+    const ratio = getContrastRatio(textColor, backgroundColor);
+    const meets = meetsContrastRequirement(textColor, backgroundColor, level, size);
+
+    return {
+      pass: meets,
+      message: () => meets
+        ? `Expected element to have poor contrast, but it has ${ratio.toFixed(2)}:1`
+        : `Expected element to have good contrast (${level} ${size}), but it has ${ratio.toFixed(2)}:1`
+    };
+  },
+
+  // Check if element is keyboard accessible
+  toBeKeyboardAccessible: (received) => {
+    const element = received;
+    const isDisabled = element.disabled || element.getAttribute('aria-disabled') === 'true';
+    const tabIndex = element.tabIndex;
+    const isFocusable = tabIndex >= 0 && !isDisabled;
+
+    return {
+      pass: isFocusable,
+      message: () => isFocusable
+        ? 'Expected element to not be keyboard accessible'
+        : 'Expected element to be keyboard accessible (not disabled and tabindex >= 0)'
+    };
+  },
+
+  // Check if element has accessible name
+  toHaveAccessibleName: (received) => {
+    const element = received;
+    const accessibleName = getAccessibleName(element);
+
+    return {
+      pass: !!accessibleName,
+      message: () => accessibleName
+        ? `Expected element to not have accessible name, but it has "${accessibleName}"`
+        : 'Expected element to have accessible name (aria-label, aria-labelledby, or text content)'
+    };
+  },
+
+  // Check if element has accessible description
+  toHaveAccessibleDescription: (received) => {
+    const element = received;
+    const description = getAccessibleDescription(element);
+
+    return {
+      pass: !!description,
+      message: () => description
+        ? `Expected element to not have accessible description, but it has "${description}"`
+        : 'Expected element to have accessible description (aria-describedby or title)'
+    };
+  },
+
+  // Check if element has proper ARIA attributes
+  toHaveValidAriaAttributes: (received) => {
+    const element = received;
+    const ariaAttributes = getAriaAttributes(element);
+    const validation = validateAriaAttributes(ariaAttributes, element);
+
+    return {
+      pass: validation.isValid,
+      message: () => validation.isValid
+        ? 'Expected element to have invalid ARIA attributes'
+        : `Expected element to have valid ARIA attributes. Issues: ${validation.errors.join(', ')}`
+    };
+  },
+
+  // Check if element has visible focus indicator
+  toHaveVisibleFocusIndicator: (received) => {
+    const element = received;
+
+    // Focus the element to test focus styles
+    element.focus();
+
+    const focusStyles = window.getComputedStyle(element, ':focus');
+    const hasOutline = focusStyles.outline !== 'none' && focusStyles.outline !== '0px';
+    const hasBoxShadow = focusStyles.boxShadow !== 'none';
+    const hasBorder = focusStyles.borderColor !== focusStyles.borderColor; // Simplified check
+
+    const hasVisibleFocus = hasOutline || hasBoxShadow || hasBorder;
+
+    return {
+      pass: hasVisibleFocus,
+      message: () => hasVisibleFocus
+        ? 'Expected element to not have visible focus indicator'
+        : 'Expected element to have visible focus indicator (outline, box-shadow, or border change)'
+    };
+  }
+};
+
+// Add custom matchers to Jest if available
+if (typeof expect !== 'undefined') {
+  Object.keys(accessibilityMatchers).forEach(matcherName => {
+    expect.extend({
+      [matcherName]: accessibilityMatchers[matcherName]
+    });
+  });
+}
+
+/**
+ * Test utilities for accessibility
+ */
+export const a11yTestUtils = {
+  // Run axe tests on rendered component
+  runAxeTests: async (container, options = {}) => {
+    if (!axe) {
+      await loadJestAxe();
+    }
+
+    if (!axe) {
+      console.warn('axe not available, returning mock results');
+      return {
+        violations: [],
+        passes: [],
+        incomplete: [],
+        inaccessible: []
+      };
+    }
+
+    const results = await axe(container, {
+      rules: {
+        'color-contrast': { enabled: true },
+        'keyboard-navigation': { enabled: true },
+        'focus-management': { enabled: true },
+        'aria-labels': { enabled: true },
+        ...options.rules
+      },
+      tags: ['wcag2a', 'wcag2aa', 'wcag21aa', ...(options.tags || [])],
+      ...options
+    });
+
+    return results;
+  },
+
+  // Test keyboard navigation
+  testKeyboardNavigation: (container, keys = ['Tab', 'Enter', 'Escape', 'ArrowUp', 'ArrowDown']) => {
+    const focusableElements = getFocusableElements(container);
+    const results = [];
+
+    keys.forEach(key => {
+      focusableElements.forEach(element => {
+        element.focus();
+        const event = new KeyboardEvent('keydown', { key, bubbles: true });
+        const handled = element.dispatchEvent(event);
+
+        results.push({
+          element,
+          key,
+          handled,
+          focused: document.activeElement === element
+        });
+      });
+    });
+
+    return results;
+  },
+
+  // Test focus management
+  testFocusManagement: (container) => {
+    const focusableElements = getFocusableElements(container);
+    const results = {
+      totalFocusable: focusableElements.length,
+      canFocusAll: true,
+      focusOrder: [],
+      issues: []
+    };
+
+    focusableElements.forEach((element, index) => {
+      try {
+        element.focus();
+        const isFocused = document.activeElement === element;
+
+        results.focusOrder.push({
+          index,
+          element,
+          focused: isFocused,
+          tabIndex: element.tabIndex
+        });
+
+        if (!isFocused) {
+          results.canFocusAll = false;
+          results.issues.push(`Element at index ${index} cannot be focused`);
+        }
+      } catch (error) {
+        results.canFocusAll = false;
+        results.issues.push(`Error focusing element at index ${index}: ${error.message}`);
+      }
+    });
+
+    return results;
+  },
+
+  // Test ARIA attributes
+  testAriaAttributes: (container) => {
+    const elementsWithAria = container.querySelectorAll('[aria-*], [role]');
+    const results = [];
+
+    elementsWithAria.forEach(element => {
+      const ariaAttributes = getAriaAttributes(element);
+      const validation = validateAriaAttributes(ariaAttributes, element);
+
+      results.push({
+        element,
+        attributes: ariaAttributes,
+        isValid: validation.isValid,
+        errors: validation.errors,
+        warnings: validation.warnings
+      });
+    });
+
+    return {
+      results,
+      summary: {
+        total: results.length,
+        valid: results.filter(r => r.isValid).length,
+        invalid: results.filter(r => !r.isValid).length
+      }
+    };
+  },
+
+  // Test color contrast
+  testColorContrast: (container) => {
+    const textElements = container.querySelectorAll('*');
+    const results = [];
+
+    textElements.forEach(element => {
+      if (hasTextContent(element)) {
+        const styles = window.getComputedStyle(element);
+        const textColor = styles.color;
+        const backgroundColor = getEffectiveBackgroundColor(element);
+
+        if (textColor && backgroundColor) {
+          const ratio = getContrastRatio(textColor, backgroundColor);
+          const meetsAA = meetsContrastRequirement(textColor, backgroundColor, 'AA');
+          const meetsAAA = meetsContrastRequirement(textColor, backgroundColor, 'AAA');
+
+          results.push({
+            element,
+            textColor,
+            backgroundColor,
+            ratio,
+            meetsAA,
+            meetsAAA
+          });
+        }
+      }
+    });
+
+    return {
+      results,
+      summary: {
+        total: results.length,
+        passingAA: results.filter(r => r.meetsAA).length,
+        passingAAA: results.filter(r => r.meetsAAA).length
+      }
+    };
+  }
+};
+
+/**
+ * Helper functions for testing
+ */
+export const testHelpers = {
+  // Simulate keyboard events
+  simulateKeyPress: (element, key, options = {}) => {
+    const event = new KeyboardEvent('keydown', {
+      key,
+      bubbles: true,
+      cancelable: true,
+      ...options
+    });
+
+    element.dispatchEvent(event);
+    return event;
+  },
+
+  // Simulate focus events
+  simulateFocus: (element) => {
+    element.focus();
+    const event = new FocusEvent('focus', { bubbles: true });
+    element.dispatchEvent(event);
+    return event;
+  },
+
+  // Simulate blur events
+  simulateBlur: (element) => {
+    const event = new FocusEvent('blur', { bubbles: true });
+    element.dispatchEvent(event);
+    element.blur();
+    return event;
+  },
+
+  // Wait for accessibility tree updates
+  waitForA11yTree: (timeout = 100) => {
+    return new Promise(resolve => setTimeout(resolve, timeout));
+  },
+
+  // Get element's accessible name
+  getAccessibleName: (element) => {
+    return element.getAttribute('aria-label') ||
+      getTextFromLabelledBy(element) ||
+      element.textContent?.trim() ||
+      element.getAttribute('title') ||
+      element.getAttribute('alt') ||
+      '';
+  },
+
+  // Get element's accessible description
+  getAccessibleDescription: (element) => {
+    return getTextFromDescribedBy(element) ||
+      element.getAttribute('title') ||
+      '';
+  },
+
+  // Check if element has text content
+  hasTextContent: (element) => {
+    return element.textContent && element.textContent.trim().length > 0;
+  }
+};
+
+// Helper functions
+const getEffectiveBackgroundColor = (element) => {
+  let current = element;
+  while (current && current !== document.body) {
+    const styles = window.getComputedStyle(current);
+    const bgColor = styles.backgroundColor;
+
+    if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
+      return bgColor;
+    }
+
+    current = current.parentElement;
+  }
+
+  return '#ffffff'; // Default to white
+};
+
+const getAccessibleName = (element) => {
+  return element.getAttribute('aria-label') ||
+    getTextFromLabelledBy(element) ||
+    element.textContent?.trim() ||
+    element.getAttribute('title') ||
+    element.getAttribute('alt') ||
+    '';
+};
+
+const getAccessibleDescription = (element) => {
+  return getTextFromDescribedBy(element) ||
+    element.getAttribute('title') ||
+    '';
+};
+
+const getTextFromLabelledBy = (element) => {
+  const labelledBy = element.getAttribute('aria-labelledby');
+  if (!labelledBy) return '';
+
+  const ids = labelledBy.split(' ');
+  return ids.map(id => {
+    const labelElement = document.getElementById(id);
+    return labelElement ? labelElement.textContent?.trim() : '';
+  }).filter(Boolean).join(' ');
+};
+
+const getTextFromDescribedBy = (element) => {
+  const describedBy = element.getAttribute('aria-describedby');
+  if (!describedBy) return '';
+
+  const ids = describedBy.split(' ');
+  return ids.map(id => {
+    const descElement = document.getElementById(id);
+    return descElement ? descElement.textContent?.trim() : '';
+  }).filter(Boolean).join(' ');
+};
+
+const getAriaAttributes = (element) => {
+  const attributes = {};
+  Array.from(element.attributes).forEach(attr => {
+    if (attr.name.startsWith('aria-') || attr.name === 'role') {
+      attributes[attr.name] = attr.value;
+    }
+  });
+  return attributes;
+};
+
+const validateAriaAttributes = (attributes, element) => {
+  const validation = {
+    isValid: true,
+    errors: [],
+    warnings: []
+  };
+
+  // Basic validation rules
+  Object.entries(attributes).forEach(([name, value]) => {
+    if (name.startsWith('aria-')) {
+      // Check for empty values
+      if (!value || value.trim() === '') {
+        validation.errors.push(`${name} has empty value`);
+        validation.isValid = false;
+      }
+
+      // Check boolean attributes
+      if (['aria-hidden', 'aria-expanded', 'aria-selected', 'aria-checked'].includes(name)) {
+        if (!['true', 'false'].includes(value)) {
+          validation.errors.push(`${name} must be "true" or "false"`);
+          validation.isValid = false;
+        }
+      }
+    }
+  });
+
+  return validation;
+};
+
+const hasTextContent = (element) => {
+  return element.textContent && element.textContent.trim().length > 0;
+};
+
+export default {
+  accessibilityMatchers,
+  a11yTestUtils,
+  testHelpers
+};

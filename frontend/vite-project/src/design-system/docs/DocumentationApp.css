@@ -1,0 +1,537 @@
+/**
+ * Documentation Application Styles
+ * Main styles for the documentation site
+ */
+
+/* Theme Variables */
+.docs-theme-dark {
+    --docs-bg-primary: #0a0a0a;
+    --docs-bg-secondary: #1a1a1a;
+    --docs-bg-tertiary: #2a2a2a;
+    --docs-text-primary: #ffffff;
+    --docs-text-secondary: #b3b3b3;
+    --docs-text-muted: #666666;
+    --docs-border: #333333;
+    --docs-accent: #0ea5e9;
+    --docs-success: #10b981;
+    --docs-warning: #f59e0b;
+    --docs-error: #ef4444;
+    --docs-glass-bg: rgba(255, 255, 255, 0.05);
+    --docs-glass-border: rgba(255, 255, 255, 0.1);
+    --docs-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.docs-theme-light {
+    --docs-bg-primary: #ffffff;
+    --docs-bg-secondary: #f8fafc;
+    --docs-bg-tertiary: #e2e8f0;
+    --docs-text-primary: #1a202c;
+    --docs-text-secondary: #4a5568;
+    --docs-text-muted: #a0aec0;
+    --docs-border: #e2e8f0;
+    --docs-accent: #0ea5e9;
+    --docs-success: #10b981;
+    --docs-warning: #f59e0b;
+    --docs-error: #ef4444;
+    --docs-glass-bg: rgba(255, 255, 255, 0.8);
+    --docs-glass-border: rgba(0, 0, 0, 0.1);
+    --docs-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+/* Base Styles */
+.documentation-app {
+    min-height: 100vh;
+    background: var(--docs-bg-primary);
+    color: var(--docs-text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Header */
+.docs-header {
+    height: 60px;
+    background: var(--docs-bg-secondary);
+    border-bottom: 1px solid var(--docs-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+}
+
+.docs-header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.nav-toggle {
+    background: none;
+    border: none;
+    color: var(--docs-text-primary);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 6px;
+    transition: background-color 0.2s;
+}
+
+.nav-toggle:hover {
+    background: var(--docs-bg-tertiary);
+}
+
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.breadcrumb-home {
+    color: var(--docs-text-secondary);
+}
+
+.breadcrumb-separator {
+    color: var(--docs-text-muted);
+}
+
+.breadcrumb-current {
+    color: var(--docs-text-primary);
+    font-weight: 500;
+}
+
+.docs-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.keyboard-shortcuts {
+    position: relative;
+}
+
+.shortcuts-btn {
+    background: none;
+    border: none;
+    color: var(--docs-text-secondary);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.shortcuts-btn:hover {
+    background: var(--docs-bg-tertiary);
+    color: var(--docs-text-primary);
+}
+
+.shortcuts-tooltip {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: var(--docs-bg-tertiary);
+    border: 1px solid var(--docs-border);
+    border-radius: 8px;
+    padding: 12px;
+    min-width: 200px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.2s;
+    z-index: 1000;
+}
+
+.shortcuts-btn:hover+.shortcuts-tooltip,
+.shortcuts-tooltip:hover {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.shortcut {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: var(--docs-text-secondary);
+}
+
+.shortcut:last-child {
+    margin-bottom: 0;
+}
+
+kbd {
+    background: var(--docs-bg-primary);
+    border: 1px solid var(--docs-border);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 10px;
+    font-family: monospace;
+}
+
+.theme-toggle {
+    background: none;
+    border: none;
+    color: var(--docs-text-primary);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 6px;
+    transition: background-color 0.2s;
+}
+
+.theme-toggle:hover {
+    background: var(--docs-bg-tertiary);
+}
+
+/* Layout */
+.docs-layout {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Sidebar */
+.docs-sidebar {
+    width: 280px;
+    background: var(--docs-bg-secondary);
+    border-right: 1px solid var(--docs-border);
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.docs-sidebar.collapsed {
+    width: 0;
+    border-right: none;
+}
+
+.documentation-app.nav-collapsed .docs-sidebar {
+    width: 0;
+    border-right: none;
+}
+
+/* Navigation */
+.docs-nav {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 0;
+}
+
+.docs-nav-header {
+    padding: 0 24px 24px;
+    border-bottom: 1px solid var(--docs-border);
+    margin-bottom: 24px;
+}
+
+.docs-nav-header h2 {
+    margin: 0 0 8px;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--docs-text-primary);
+}
+
+.version {
+    background: var(--docs-accent);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.docs-nav-links {
+    flex: 1;
+    padding: 0 12px;
+}
+
+.docs-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 12px;
+    background: none;
+    border: none;
+    color: var(--docs-text-secondary);
+    text-align: left;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 4px;
+}
+
+.docs-nav-link:hover {
+    background: var(--docs-bg-tertiary);
+    color: var(--docs-text-primary);
+}
+
+.docs-nav-link.active {
+    background: var(--docs-accent);
+    color: white;
+}
+
+.nav-icon {
+    font-size: 16px;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.nav-text {
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.docs-nav-footer {
+    padding: 24px;
+    border-top: 1px solid var(--docs-border);
+    margin-top: auto;
+}
+
+.system-info {
+    margin-bottom: 16px;
+}
+
+.system-info p {
+    margin: 0 0 12px;
+    font-size: 12px;
+    color: var(--docs-text-secondary);
+    line-height: 1.4;
+}
+
+.tech-stack {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.tech-badge {
+    background: var(--docs-bg-tertiary);
+    color: var(--docs-text-secondary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 500;
+}
+
+.external-links {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.external-links a {
+    color: var(--docs-text-secondary);
+    text-decoration: none;
+    font-size: 12px;
+    transition: color 0.2s;
+}
+
+.external-links a:hover {
+    color: var(--docs-accent);
+}
+
+/* Main Content */
+.docs-main {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.docs-content {
+    padding: 32px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Footer */
+.docs-footer {
+    background: var(--docs-bg-secondary);
+    border-top: 1px solid var(--docs-border);
+    padding: 16px 24px;
+    margin-top: auto;
+}
+
+.footer-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1200px;
+    margin: 0 auto;
+    font-size: 12px;
+    color: var(--docs-text-secondary);
+}
+
+.footer-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.footer-separator {
+    color: var(--docs-text-muted);
+}
+
+.footer-right {
+    color: var(--docs-text-muted);
+}
+
+/* Route Loading Indicator */
+.route-loading-indicator {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--docs-accent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s ease;
+    z-index: 1000;
+}
+
+.route-loading-indicator.loading {
+    transform: scaleX(1);
+}
+
+/* Integration Status Debug */
+.integration-status-debug {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    background: var(--docs-bg-tertiary);
+    border: 1px solid var(--docs-border);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 12px;
+    max-width: 300px;
+    z-index: 1000;
+}
+
+.integration-status-debug details {
+    cursor: pointer;
+}
+
+.integration-status-debug summary {
+    font-weight: 600;
+    color: var(--docs-text-primary);
+    margin-bottom: 8px;
+}
+
+.integration-status-debug pre {
+    background: var(--docs-bg-primary);
+    border: 1px solid var(--docs-border);
+    border-radius: 4px;
+    padding: 8px;
+    overflow-x: auto;
+    font-size: 10px;
+    color: var(--docs-text-secondary);
+    margin: 0;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+    .docs-layout {
+        flex-direction: column;
+    }
+
+    .docs-sidebar {
+        width: 100%;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--docs-border);
+    }
+
+    .docs-nav {
+        padding: 16px 0;
+    }
+
+    .docs-nav-links {
+        display: flex;
+        overflow-x: auto;
+        padding: 0 16px;
+        gap: 8px;
+    }
+
+    .docs-nav-link {
+        white-space: nowrap;
+        flex-shrink: 0;
+        margin-bottom: 0;
+    }
+
+    .docs-nav-footer {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .docs-header {
+        padding: 0 16px;
+    }
+
+    .docs-content {
+        padding: 16px;
+    }
+
+    .breadcrumb {
+        display: none;
+    }
+
+    .keyboard-shortcuts {
+        display: none;
+    }
+
+    .footer-content {
+        flex-direction: column;
+        gap: 8px;
+        text-align: center;
+    }
+
+    .integration-status-debug {
+        bottom: 8px;
+        right: 8px;
+        left: 8px;
+        max-width: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .docs-header {
+        height: 50px;
+        padding: 0 12px;
+    }
+
+    .docs-header-right {
+        gap: 8px;
+    }
+
+    .theme-toggle,
+    .nav-toggle {
+        padding: 6px;
+        font-size: 16px;
+    }
+
+    .docs-content {
+        padding: 12px;
+    }
+
+    .docs-nav-header h2 {
+        font-size: 16px;
+    }
+
+    .docs-nav-link {
+        padding: 8px;
+        font-size: 12px;
+    }
+
+    .nav-icon {
+        font-size: 14px;
+        width: 16px;
+    }
+}

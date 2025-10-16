@@ -1,0 +1,579 @@
+/**
+ * Trading Dashboard Styles
+ * Modern, professional styling for the AI trading platform
+ */
+
+/* Global App Container */
+.app-container {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
+    color: #ffffff;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Trading Dashboard */
+.trading-dashboard {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+/* Dashboard Header */
+.dashboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 2rem;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    z-index: 100;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+}
+
+.logo-section {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.logo {
+    font-size: 1.5rem;
+    font-weight: 700;
+    background: linear-gradient(45deg, #00d4ff, #ff6b6b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.version {
+    font-size: 0.75rem;
+    opacity: 0.6;
+}
+
+.workspace-tabs {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.workspace-tab {
+    padding: 0.5rem 1rem;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.5rem;
+    color: #ffffff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.workspace-tab:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.workspace-tab.active {
+    background: rgba(0, 212, 255, 0.2);
+    border-color: #00d4ff;
+}
+
+/* Header Center */
+.header-center {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+}
+
+.ticker-search {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.search-container {
+    position: relative;
+}
+
+.ticker-input {
+    padding: 0.5rem 1rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.5rem;
+    color: #ffffff;
+    font-size: 1rem;
+    min-width: 200px;
+}
+
+.ticker-input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.quick-watchlist {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.watchlist-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 60px;
+}
+
+.watchlist-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.watchlist-item.active {
+    background: rgba(0, 212, 255, 0.2);
+    border-color: #00d4ff;
+}
+
+.price-change {
+    font-size: 0.75rem;
+    color: #4ade80;
+}
+
+/* Header Right */
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.ai-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: rgba(255, 107, 107, 0.2);
+    border: 1px solid #ff6b6b;
+    border-radius: 0.5rem;
+}
+
+.ai-indicator.enhanced {
+    background: rgba(0, 212, 255, 0.2);
+    border-color: #00d4ff;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ef4444;
+}
+
+.status-indicator.connected .status-dot {
+    background: #4ade80;
+}
+
+.latency {
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 500;
+}
+
+.btn-glass {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.btn-glass:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-ai-primary {
+    background: linear-gradient(45deg, #00d4ff, #0099cc);
+    color: #ffffff;
+    border: none;
+}
+
+.btn-ai-primary:hover {
+    background: linear-gradient(45deg, #0099cc, #00d4ff);
+}
+
+.btn-ai-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Dashboard Content */
+.dashboard-content {
+    flex: 1;
+    display: flex;
+    padding: 1rem;
+    gap: 1rem;
+    overflow: hidden;
+}
+
+/* Trading Workspace */
+.main-trading-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.chart-section {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 1rem;
+    padding: 1rem;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.trading-panels {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+    height: 300px;
+}
+
+.side-panels {
+    width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* Analysis Workspace */
+.analysis-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    grid-template-rows: 2fr 1fr;
+    gap: 1rem;
+    width: 100%;
+}
+
+.chart-analysis {
+    grid-row: span 2;
+}
+
+/* Portfolio Workspace */
+.portfolio-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: 100%;
+}
+
+.portfolio-overview {
+    flex: 1;
+}
+
+/* Social Workspace */
+.social-workspace {
+    width: 100%;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.loading-spinner {
+    text-align: center;
+    color: #ffffff;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top: 3px solid #00d4ff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* System Health Alert */
+.system-health-alert {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    background: rgba(255, 193, 7, 0.9);
+    color: #000;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    max-width: 300px;
+    z-index: 1001;
+}
+
+.system-health-alert.critical {
+    background: rgba(220, 53, 69, 0.9);
+    color: #fff;
+}
+
+.health-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.health-issues {
+    font-size: 0.875rem;
+}
+
+.health-issue {
+    margin-bottom: 0.25rem;
+}
+
+/* Performance Debug */
+.performance-debug {
+    position: fixed;
+    bottom: 1rem;
+    left: 1rem;
+    background: rgba(0, 0, 0, 0.8);
+    color: #ffffff;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    max-width: 400px;
+    font-family: monospace;
+    font-size: 0.75rem;
+    z-index: 1001;
+}
+
+.integration-status-debug {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    background: rgba(0, 0, 0, 0.8);
+    color: #ffffff;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    max-width: 400px;
+    font-family: monospace;
+    font-size: 0.75rem;
+    z-index: 1001;
+}
+
+/* Error Boundary Styles */
+.error-boundary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
+    color: #ffffff;
+    padding: 2rem;
+}
+
+.error-boundary-content {
+    text-align: center;
+    max-width: 500px;
+}
+
+.error-boundary-content h2 {
+    margin-bottom: 1rem;
+    color: #ff6b6b;
+}
+
+.error-details {
+    margin: 1rem 0;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 1rem;
+    border-radius: 0.5rem;
+}
+
+.error-details pre {
+    white-space: pre-wrap;
+    font-size: 0.875rem;
+    margin: 0.5rem 0;
+}
+
+.error-boundary-button {
+    padding: 0.75rem 1.5rem;
+    background: #00d4ff;
+    color: #ffffff;
+    border: none;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.2s ease;
+}
+
+.error-boundary-button:hover {
+    background: #0099cc;
+}
+
+/* Enhanced Error Boundary */
+.enhanced-error-boundary {
+    background: rgba(255, 107, 107, 0.1);
+    border: 1px solid rgba(255, 107, 107, 0.3);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.error-content h3 {
+    margin: 0 0 0.5rem 0;
+    color: #ff6b6b;
+}
+
+.error-id {
+    font-family: monospace;
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+
+.retry-button {
+    padding: 0.5rem 1rem;
+    background: #ff6b6b;
+    color: #ffffff;
+    border: none;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    margin-top: 0.5rem;
+}
+
+.retry-button:hover {
+    background: #ff5252;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .dashboard-header {
+        padding: 1rem;
+    }
+
+    .header-left,
+    .header-right {
+        gap: 1rem;
+    }
+
+    .quick-watchlist {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .dashboard-header {
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1rem;
+    }
+
+    .header-center {
+        order: -1;
+    }
+
+    .workspace-tabs {
+        flex-wrap: wrap;
+    }
+
+    .dashboard-content {
+        flex-direction: column;
+        padding: 0.5rem;
+    }
+
+    .side-panels {
+        width: 100%;
+    }
+
+    .analysis-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+    }
+
+    .chart-analysis {
+        grid-row: span 1;
+    }
+}
+
+/* Theme Variants */
+.theme-light {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    color: #1a202c;
+}
+
+.theme-light .dashboard-header {
+    background: rgba(255, 255, 255, 0.8);
+    border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+
+.theme-light .chart-section {
+    background: rgba(255, 255, 255, 0.8);
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Layout Variants */
+.layout-compact .dashboard-content {
+    padding: 0.5rem;
+    gap: 0.5rem;
+}
+
+.layout-compact .chart-section {
+    padding: 0.5rem;
+}
+
+.layout-mobile .dashboard-header {
+    padding: 0.5rem;
+}
+
+.layout-mobile .dashboard-content {
+    padding: 0.25rem;
+}
+
+/* Performance Mode */
+.performance-mode * {
+    transition: none !important;
+    animation: none !important;
+}
+
+.low-complexity-mode {
+    filter: none !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+}

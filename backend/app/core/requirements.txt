@@ -1,0 +1,23 @@
+# Core VVP Dependencies
+# High-performance computing and optimization
+
+# Core dependencies
+numpy>=1.21.0
+cython>=0.29.0
+psutil>=5.8.0
+
+# Performance optimization (Linux/macOS only)
+uvloop>=0.17.0; sys_platform != "win32"  # High-performance event loop
+
+# Optional dependencies for advanced features
+# numba>=0.56.0  # JIT compilation (optional)
+# scipy>=1.7.0   # Scientific computing (optional)
+
+# Development and testing
+pytest>=6.0.0
+pytest-benchmark>=3.4.0
+memory-profiler>=0.60.0
+
+# Build tools
+setuptools>=60.0.0
+wheel>=0.37.0

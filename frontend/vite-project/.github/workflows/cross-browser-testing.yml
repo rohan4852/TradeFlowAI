@@ -1,0 +1,367 @@
+name: Cross-Browser and Accessibility Testing
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  cross-browser-tests:
+    name: Cross-Browser Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+        node-version: [18, 20]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: frontend/vite-project/package-lock.json
+
+    - name: Install dependencies
+      working-directory: frontend/vite-project
+      run: npm ci
+
+    - name: Install Playwright browsers
+      working-directory: frontend/vite-project
+      run: npx playwright install --with-deps ${{ matrix.browser }}
+
+    - name: Build application
+      working-directory: frontend/vite-project
+      run: npm run build
+
+    - name: Start application
+      working-directory: frontend/vite-project
+      run: |
+        npm run preview &
+        sleep 10
+        curl -f http://localhost:4173 || exit 1
+
+    - name: Run cross-browser tests
+      working-directory: frontend/vite-project
+      run: npx playwright test --project=${{ matrix.browser }} --reporter=html,json
+      env:
+        CI: true
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ matrix.browser }}-node${{ matrix.node-version }}
+        path: |
+          frontend/vite-project/test-results/
+          frontend/vite-project/playwright-report/
+        retention-days: 7
+
+  accessibility-tests:
+    name: Accessibility Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/vite-project/package-lock.json
+
+    - name: Install dependencies
+      working-directory: frontend/vite-project
+      run: npm ci
+
+    - name: Install Playwright browsers
+      working-directory: frontend/vite-project
+      run: npx playwright install --with-deps chromium
+
+    - name: Build application
+      working-directory: frontend/vite-project
+      run: npm run build
+
+    - name: Start application
+      working-directory: frontend/vite-project
+      run: |
+        npm run preview &
+        sleep 10
+
+    - name: Run PA11y accessibility tests
+      working-directory: frontend/vite-project
+      run: |
+        npx pa11y-ci --sitemap http://localhost:4173/sitemap.xml --reporter json > pa11y-results.json || true
+        cat pa11y-results.json
+
+    - name: Run Playwright accessibility tests
+      working-directory: frontend/vite-project
+      run: npx playwright test --grep="accessibility" --reporter=json
+      env:
+        CI: true
+
+    - name: Run Lighthouse accessibility audit
+      working-directory: frontend/vite-project
+      run: |
+        npm install -g @lhci/cli
+        lhci autorun --config=lighthouserc.js || true
+
+    - name: Upload accessibility results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: accessibility-results
+        path: |
+          frontend/vite-project/pa11y-results.json
+          frontend/vite-project/test-results/
+          frontend/vite-project/lighthouse-ci-results/
+        retention-days: 7
+
+  responsive-tests:
+    name: Responsive Design Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [mobile, tablet, desktop]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/vite-project/package-lock.json
+
+    - name: Install dependencies
+      working-directory: frontend/vite-project
+      run: npm ci
+
+    - name: Install Playwright browsers
+      working-directory: frontend/vite-project
+      run: npx playwright install --with-deps chromium
+
+    - name: Build application
+      working-directory: frontend/vite-project
+      run: npm run build
+
+    - name: Start application
+      working-directory: frontend/vite-project
+      run: |
+        npm run preview &
+        sleep 10
+
+    - name: Run responsive tests
+      working-directory: frontend/vite-project
+      run: npx playwright test --grep="responsive" --project="${{ matrix.device }}" --reporter=json
+      env:
+        CI: true
+
+    - name: Upload responsive test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: responsive-results-${{ matrix.device }}
+        path: frontend/vite-project/test-results/
+        retention-days: 7
+
+  theme-tests:
+    name: Theme Variation Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        theme: [light, dark, high-contrast]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/vite-project/package-lock.json
+
+    - name: Install dependencies
+      working-directory: frontend/vite-project
+      run: npm ci
+
+    - name: Install Playwright browsers
+      working-directory: frontend/vite-project
+      run: npx playwright install --with-deps chromium
+
+    - name: Build application
+      working-directory: frontend/vite-project
+      run: npm run build
+
+    - name: Start application
+      working-directory: frontend/vite-project
+      run: |
+        npm run preview &
+        sleep 10
+
+    - name: Run theme tests
+      working-directory: frontend/vite-project
+      run: npx playwright test --grep="theme.*${{ matrix.theme }}" --reporter=json
+      env:
+        CI: true
+        TEST_THEME: ${{ matrix.theme }}
+
+    - name: Upload theme test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: theme-results-${{ matrix.theme }}
+        path: frontend/vite-project/test-results/
+        retention-days: 7
+
+  generate-report:
+    name: Generate Comprehensive Report
+    runs-on: ubuntu-latest
+    needs: [cross-browser-tests, accessibility-tests, responsive-tests, theme-tests]
+    if: always()
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/vite-project/package-lock.json
+
+    - name: Install dependencies
+      working-directory: frontend/vite-project
+      run: npm ci
+
+    - name: Download all test results
+      uses: actions/download-artifact@v4
+      with:
+        path: frontend/vite-project/all-test-results/
+
+    - name: Generate comprehensive report
+      working-directory: frontend/vite-project
+      run: |
+        node src/tests/test-runner.js --generate-report-only
+        ls -la test-results/
+
+    - name: Upload comprehensive report
+      uses: actions/upload-artifact@v4
+      with:
+        name: comprehensive-test-report
+        path: |
+          frontend/vite-project/test-results/comprehensive-report.html
+          frontend/vite-project/test-results/comprehensive-report-*.json
+        retention-days: 30
+
+    - name: Comment PR with results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const path = 'frontend/vite-project/test-results/comprehensive-report.json';
+          
+          if (fs.existsSync(path)) {
+            const report = JSON.parse(fs.readFileSync(path, 'utf8'));
+            
+            const comment = `## 🧪 Test Results Summary
+            
+            **Total Tests:** ${report.summary.totalTests}
+            **Passed:** ✅ ${report.summary.passed}
+            **Failed:** ❌ ${report.summary.failed}
+            **Skipped:** ⏭️ ${report.summary.skipped}
+            
+            ### Test Suites
+            ${Object.entries(report.suites).map(([name, suite]) => 
+              `- **${name}**: ${suite.status} (${suite.passed}/${suite.totalTests})`
+            ).join('\n')}
+            
+            ${report.criticalIssues.length > 0 ? `
+            ### ⚠️ Critical Issues
+            ${report.criticalIssues.map(issue => `- ${issue.message}`).join('\n')}
+            ` : ''}
+            
+            ${report.recommendations.length > 0 ? `
+            ### 💡 Recommendations
+            ${report.recommendations.map(rec => `- ${rec.message}`).join('\n')}
+            ` : ''}
+            
+            [View detailed report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+          }
+
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/vite-project/package-lock.json
+
+    - name: Install dependencies
+      working-directory: frontend/vite-project
+      run: npm ci
+
+    - name: Build application
+      working-directory: frontend/vite-project
+      run: npm run build
+
+    - name: Start application
+      working-directory: frontend/vite-project
+      run: |
+        npm run preview &
+        sleep 10
+
+    - name: Run Lighthouse performance tests
+      working-directory: frontend/vite-project
+      run: |
+        npm install -g @lhci/cli
+        lhci autorun --config=lighthouserc.js
+
+    - name: Upload performance results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: performance-results
+        path: frontend/vite-project/lighthouse-ci-results/
+        retention-days: 7
