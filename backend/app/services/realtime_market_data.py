@@ -82,7 +82,9 @@ class RealTimeMarketDataService:
         # Asset class configurations
         self.asset_configs = {
             AssetType.STOCK: {
-                "providers": [DataProvider.YAHOO_FINANCE, DataProvider.ALPHA_VANTAGE, DataProvider.FINNHUB],
+                # Prefer vendor APIs first (Finnhub/AlphaVantage/Polygon) and use
+                # Yahoo as a last-resort fallback to reduce dependence on Yahoo
+                "providers": [DataProvider.FINNHUB, DataProvider.ALPHA_VANTAGE, DataProvider.POLYGON, DataProvider.YAHOO_FINANCE],
                 "update_interval": 1,  # seconds
                 "symbols": ["AAPL", "GOOGL", "MSFT", "TSLA", "NVDA", "AMZN", "META", "NFLX"]
             },
@@ -109,8 +111,18 @@ class RealTimeMarketDataService:
         }
         # Provider health / circuit-breaker state to avoid hammering failing providers
         # Structure: { DataProvider: { 'failure_count': int, 'backoff_until': datetime | None } }
+        # initialize health for all providers we may use
         self.provider_health: Dict[DataProvider, Dict[str, Any]] = {
-            DataProvider.YAHOO_FINANCE: {'failure_count': 0, 'backoff_until': None}
+            p: {'failure_count': 0, 'backoff_until': None} for p in DataProvider
+        }
+        # Runtime provider stats for capacity-based selection
+        # Structure: { provider: { requests: int, successes: int, failures: int, last_rate_info: dict }}
+        self.provider_stats: Dict[DataProvider, Dict[str, Any]] = {
+            p: {'requests': 0, 'successes': 0, 'failures': 0, 'last_rate_info': {}} for p in DataProvider
+        }
+        # Locks to serialize provider access and avoid race conditions when marking failures/backoff
+        self.provider_locks: Dict[DataProvider, asyncio.Lock] = {
+            p: asyncio.Lock() for p in DataProvider
         }
     
     async def start(self):
@@ -173,19 +185,79 @@ class RealTimeMarketDataService:
     
     async def get_quote(self, symbol: str, asset_type: AssetType) -> Optional[RealTimeQuote]:
         """Get current quote for a symbol"""
-        try:
-            if asset_type == AssetType.STOCK or asset_type == AssetType.FOREX or asset_type == AssetType.CRYPTO:
-                return await self._fetch_yahoo_quote(symbol, asset_type)
-            elif asset_type == AssetType.COMMODITY:
-                return await self._fetch_commodity_quote(symbol)
-            elif asset_type == AssetType.INDEX:
-                return await self._fetch_index_quote(symbol)
-            else:
-                logger.warning(f"Unsupported asset type: {asset_type}")
-                return None
-        except Exception as e:
-            logger.error(f"Error fetching quote for {symbol}: {e}")
+        # Try providers in order configured for this asset type
+        providers = self.asset_configs.get(asset_type, {}).get('providers', [])
+        if not providers:
+            logger.warning(f"Unsupported asset type: {asset_type}")
             return None
+
+        # Re-order providers by runtime score (preferring providers with best observed capacity)
+        providers = self._rank_providers_by_capacity(providers)
+        for provider in providers:
+            # Acquire provider-specific lock to avoid races when checking/setting health
+            lock = self.provider_locks.get(provider)
+            if lock is None:
+                lock = asyncio.Lock()
+                self.provider_locks[provider] = lock
+
+            async with lock:
+                # check provider health/backoff (re-check under lock)
+                health = self.provider_health.get(provider, {'failure_count': 0, 'backoff_until': None})
+                now = datetime.now()
+                backoff_until = health.get('backoff_until')
+                if backoff_until and now < backoff_until:
+                    logger.debug(f"Provider {provider.value} in backoff until {backoff_until}; skipping")
+                    continue
+
+            # Dispatch to provider-specific fetchers (outside lock to allow concurrent requests to different providers)
+            try:
+                # record that we're attempting this provider
+                try:
+                    self.provider_stats[provider]['requests'] += 1
+                except Exception:
+                    # defensive: ensure provider_stats exists
+                    self.provider_stats.setdefault(provider, {'requests': 0, 'successes': 0, 'failures': 0, 'last_rate_info': {}})
+                    self.provider_stats[provider]['requests'] += 1
+                if provider == DataProvider.FINNHUB:
+                    quote = await self._fetch_finnhub_quote(symbol, asset_type)
+                elif provider == DataProvider.ALPHA_VANTAGE:
+                    quote = await self._fetch_alpha_vantage_quote(symbol, asset_type)
+                elif provider == DataProvider.POLYGON:
+                    quote = await self._fetch_polygon_quote(symbol, asset_type)
+                elif provider == DataProvider.YAHOO_FINANCE:
+                    quote = await self._fetch_yahoo_quote(symbol, asset_type)
+                else:
+                    # Not implemented provider, skip
+                    quote = None
+
+                if quote:
+                    # success -> reset provider health and return
+                    self.provider_health[provider] = {'failure_count': 0, 'backoff_until': None}
+                    # record success
+                    self._record_provider_success(provider)
+                    return quote
+                # if quote is None, treat as failure and let exception handler handle it
+            except Exception as e:
+                # mark provider failure with exponential backoff
+                # capture detailed exception information for debugging
+                msg = repr(e)
+                fc = health.get('failure_count', 0) + 1
+                backoff_seconds = min(60 * (2 ** (fc - 1)), 3600)
+                backoff_until = now + timedelta(seconds=backoff_seconds)
+                self.provider_health[provider] = {'failure_count': fc, 'backoff_until': backoff_until}
+                # record failure
+                self._record_provider_failure(provider)
+                logger.error(f"Error fetching {provider.value} quote for {symbol}: {msg}. Marking {provider.value} down for {backoff_seconds}s (failure_count={fc})")
+                # try next provider in list
+                continue
+
+        # If none of the configured providers returned data, try cache or mock
+        cached = self.data_cache.get(symbol)
+        if cached:
+            logger.warning(f"Returning cached quote for {symbol} after all providers failed")
+            return cached
+        return self._get_mock_quote(symbol, asset_type)
+    
     
     async def get_historical_data(self, symbol: str, asset_type: AssetType, 
                                 period: str = "1d", interval: str = "1m") -> List[OHLCVData]:
@@ -278,6 +350,11 @@ class RealTimeMarketDataService:
 
             # Reset provider health on success
             self.provider_health[provider] = {'failure_count': 0, 'backoff_until': None}
+            # record stats
+            try:
+                self._record_provider_success(provider)
+            except Exception:
+                logger.debug("Failed to record Yahoo provider success", exc_info=True)
 
             return RealTimeQuote(
                 symbol=symbol,
@@ -298,16 +375,22 @@ class RealTimeMarketDataService:
                 provider=DataProvider.YAHOO_FINANCE
             )
         except Exception as e:
+            # capture detailed exception info
+            msg = repr(e)
             # Increase failure count and set backoff with exponential backoff
-            msg = str(e)
             fc = health.get('failure_count', 0) + 1
             # base backoff 60s, double each time, cap 1 hour
             backoff_seconds = min(60 * (2 ** (fc - 1)), 3600)
             backoff_until = now + timedelta(seconds=backoff_seconds)
             self.provider_health[provider] = {'failure_count': fc, 'backoff_until': backoff_until}
+            # record failure
+            try:
+                self._record_provider_failure(provider)
+            except Exception:
+                logger.debug("Failed to record Yahoo provider failure", exc_info=True)
 
-            # Log higher-level message but avoid huge repeated logs; include exception once
-            logger.error(f"Error fetching Yahoo quote for {symbol}: {e}. Marking Yahoo provider down for {backoff_seconds}s (failure_count={fc})")
+            # Log higher-level message with repr for diagnosis
+            logger.error(f"Error fetching Yahoo quote for {symbol}: {msg}. Marking Yahoo provider down for {backoff_seconds}s (failure_count={fc})")
 
             # Prefer returning a cached last-known-good quote if available (higher fidelity fallback)
             cached = self.data_cache.get(symbol)
@@ -317,6 +400,182 @@ class RealTimeMarketDataService:
 
             # If no cached quote, return mock data. This keeps the system running during outages.
             return self._get_mock_quote(symbol, asset_type)
+
+    # ---- New provider implementations (lightweight) ----
+    async def _fetch_finnhub_quote(self, symbol: str, asset_type: AssetType) -> Optional[RealTimeQuote]:
+        """Fetch quote from Finnhub REST API (requires FINNHUB_API_KEY in env)"""
+        # Read API key synchronously from environment for clarity
+        import os
+        api_key = os.environ.get('FINNHUB_API_KEY')
+        if not api_key:
+            logger.error("Finnhub API key missing: set FINNHUB_API_KEY env var")
+            raise RuntimeError("No FINNHUB_API_KEY configured")
+
+        url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={api_key}"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=10) as resp:
+                    # record rate-limit headers if present
+                    try:
+                        self._update_rate_info_from_headers(DataProvider.FINNHUB, resp.headers)
+                    except Exception:
+                        logger.debug("Failed to parse rate headers from Finnhub response", exc_info=True)
+
+                    if resp.status != 200:
+                        text = await resp.text()
+                        logger.error(f"Finnhub HTTP {resp.status} for {symbol}: {text}")
+                        raise RuntimeError(f"Finnhub error {resp.status}: {text}")
+                    data = await resp.json()
+        except aiohttp.ClientError as ce:
+            logger.error(f"Finnhub aiohttp error for {symbol}: {repr(ce)}")
+            raise
+        except asyncio.TimeoutError as te:
+            logger.error(f"Finnhub request timeout for {symbol}: {repr(te)}")
+            raise
+
+        # Finnhub returns fields: c (current), pc (prev close), h,l,o,v
+        current = data.get('c')
+        previous = data.get('pc')
+        if current is None:
+            raise RuntimeError("Finnhub returned no current price")
+
+        change = current - previous if previous else 0
+        change_percent = (change / previous * 100) if previous else 0
+
+        return RealTimeQuote(
+            symbol=symbol,
+            asset_type=asset_type,
+            price=current,
+            change=change,
+            change_percent=change_percent,
+            volume=int(data.get('v', 0) or 0),
+            provider=DataProvider.FINNHUB,
+            timestamp=datetime.now()
+        )
+        
+
+    def _update_rate_info_from_headers(self, provider: DataProvider, headers: Any):
+        """Extract common rate-limit headers from provider responses where available."""
+        # Common header names used by providers (case-insensitive)
+        header_map = {}
+        for k, v in headers.items():
+            header_map[k.lower()] = v
+
+        rate_info = {}
+        # Example headers: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset
+        if 'x-ratelimit-limit' in header_map:
+            rate_info['limit'] = int(header_map.get('x-ratelimit-limit', 0))
+        if 'x-ratelimit-remaining' in header_map:
+            rate_info['remaining'] = int(header_map.get('x-ratelimit-remaining', 0))
+        if 'x-ratelimit-reset' in header_map:
+            try:
+                rate_info['reset'] = int(header_map.get('x-ratelimit-reset'))
+            except Exception:
+                rate_info['reset'] = header_map.get('x-ratelimit-reset')
+
+        if rate_info:
+            self.provider_stats[provider]['last_rate_info'] = rate_info
+
+    def _record_provider_success(self, provider: DataProvider):
+        s = self.provider_stats.get(provider)
+        if s is None:
+            return
+        s['requests'] += 1
+        s['successes'] += 1
+
+    def _record_provider_failure(self, provider: DataProvider):
+        s = self.provider_stats.get(provider)
+        if s is None:
+            return
+        s['requests'] += 1
+        s['failures'] += 1
+
+    def _rank_providers_by_capacity(self, providers: List[DataProvider]) -> List[DataProvider]:
+        """Return providers sorted by estimated remaining capacity (descending).
+        Simple heuristic: prefer providers with higher remaining quota (if known),
+        then higher success ratio, then fewer failures.
+        """
+        def score(p: DataProvider):
+            stats = self.provider_stats.get(p, {})
+            rate = stats.get('last_rate_info', {}) or {}
+            remaining = rate.get('remaining')
+            limit = rate.get('limit')
+            success = stats.get('successes', 0)
+            failures = stats.get('failures', 0)
+            requests = stats.get('requests', 0)
+
+            # base score
+            sc = 0.0
+            if remaining is not None and limit:
+                sc += (remaining / max(limit, 1)) * 10.0
+            # success ratio contribution
+            if requests > 0:
+                sc += (success / requests) * 5.0
+            # penalty for failures
+            sc -= failures * 0.5
+            return sc
+
+        ranked = sorted(providers, key=lambda p: score(p), reverse=True)
+        return ranked
+
+    async def _fetch_alpha_vantage_quote(self, symbol: str, asset_type: AssetType) -> Optional[RealTimeQuote]:
+        """Fetch quote from Alpha Vantage (requires ALPHA_VANTAGE_API_KEY in env)"""
+        import os
+        api_key = os.environ.get('ALPHA_VANTAGE_API_KEY')
+        if not api_key:
+            logger.error("AlphaVantage API key missing: set ALPHA_VANTAGE_API_KEY env var")
+            raise RuntimeError("No ALPHA_VANTAGE_API_KEY configured")
+
+        # Use GLOBAL_QUOTE for realtime values
+        url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={api_key}"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=10) as resp:
+                    if resp.status != 200:
+                        text = await resp.text()
+                        logger.error(f"AlphaVantage HTTP {resp.status} for {symbol}: {text}")
+                        raise RuntimeError(f"AlphaVantage error {resp.status}: {text}")
+                    data = await resp.json()
+        except aiohttp.ClientError as ce:
+            logger.error(f"AlphaVantage aiohttp error for {symbol}: {repr(ce)}")
+            raise
+        except asyncio.TimeoutError as te:
+            logger.error(f"AlphaVantage request timeout for {symbol}: {repr(te)}")
+            raise
+
+        quote = data.get('Global Quote') or data.get('Global Quote'.upper())
+        if not quote:
+            raise RuntimeError("AlphaVantage returned no Global Quote")
+
+        # Fields like '05. price', '08. previous close', '06. volume'
+        try:
+            current = float(quote.get('05. price') or quote.get('5. price') or 0)
+            previous = float(quote.get('08. previous close') or quote.get('8. previous close') or 0)
+            volume = int(float(quote.get('06. volume') or quote.get('6. volume') or 0))
+        except Exception:
+            raise RuntimeError("AlphaVantage returned malformed data")
+
+        change = current - previous if previous else 0
+        change_percent = (change / previous * 100) if previous else 0
+
+        return RealTimeQuote(
+            symbol=symbol,
+            asset_type=asset_type,
+            price=current,
+            change=change,
+            change_percent=change_percent,
+            volume=volume,
+            provider=DataProvider.ALPHA_VANTAGE,
+            timestamp=datetime.now()
+        )
+
+    async def _fetch_polygon_quote(self, symbol: str, asset_type: AssetType) -> Optional[RealTimeQuote]:
+        """Placeholder for Polygon; raise if not configured. Keep minimal to avoid heavy dependency."""
+        api_key = __import__('os').environ.get('POLYGON_API_KEY')
+        if not api_key:
+            raise RuntimeError("No POLYGON_API_KEY configured")
+        # Implementing Polygon properly requires symbol mapping and paid tiers; skip for now.
+        raise RuntimeError("Polygon provider not implemented in this lightweight fallback")
 
     def _get_mock_quote(self, symbol: str, asset_type: AssetType) -> RealTimeQuote:
         """Generate mock quote data for development/offline mode"""

@@ -143,6 +143,13 @@ app.include_router(computer_vision.router, prefix="/api/v1/computer-vision", tag
 app.include_router(broker_integration.router, prefix="/api/v1/broker", tags=["Broker Integration"])
 app.include_router(security.router, prefix="/api/v1/security", tags=["Security"])
 
+# Provider health/debug endpoint
+try:
+    from .routes import provider_health
+    app.include_router(provider_health.router, prefix="/api/v1/provider-health", tags=["Provider Health"])
+except Exception:
+    logger.debug("Provider health router failed to load")
+
 @app.get("/")
 def read_root():
     return {

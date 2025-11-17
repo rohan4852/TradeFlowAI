@@ -130,10 +130,13 @@ def create_database_connections():
         "max_overflow": 20,
         "pool_pre_ping": True,  # Verify connections before use
         "pool_recycle": 3600,   # Recycle connections every hour
+        # Note: only include connection options accepted by the DB-API used by
+        # the sync SQLAlchemy engine (psycopg2). asyncpg supports additional
+        # options like `command_timeout` but passing them here causes an
+        # "invalid dsn" error. Keep connect_args minimal for the sync engine.
         "connect_args": {
             "sslmode": "require" if "localhost" not in DATABASE_URL else "prefer",
             "connect_timeout": 30,
-            "command_timeout": 60,
         }
     }
     
