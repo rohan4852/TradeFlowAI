@@ -72,8 +72,8 @@ except ImportError:
     svc_prediction_engine = importlib.import_module("app.services.prediction_engine")
     HybridPredictionEngine = getattr(svc_prediction_engine, "HybridPredictionEngine")
 
-    svc_realtime = importlib.import_module("app.services.realtime_market_data")
-    realtime_service = getattr(svc_realtime, "realtime_service")
+    # Use fixed market data service to avoid rate limiting
+    from .services.market_data_fix import fixed_market_service as realtime_service
 
     svc_notification = importlib.import_module("app.services.notification_service")
     notification_service = getattr(svc_notification, "notification_service")
@@ -205,6 +205,24 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Realtime service failed to start (continuing): {e}")
 
+        # Start free data services (no API keys required) - disabled to avoid rate limiting
+        try:
+            # Temporarily disable to avoid rate limiting issues
+            # from .services.free_market_data_service import free_market_data_service
+            # from .services.free_websocket_service import free_websocket_service
+            # await free_market_data_service.start()
+            # await free_websocket_service.start_service()
+            logger.info("Free data services disabled to avoid rate limiting")
+        except Exception as e:
+            logger.warning(f"Free data services failed to start (continuing): {e}")
+
+        # Start professional data services (requires API keys) - disabled to avoid errors
+        try:
+            # Temporarily disable to avoid API key errors
+            logger.info("Professional data services disabled (no API keys)")
+        except Exception as e:
+            logger.warning(f"Professional data services failed to start (continuing): {e}")
+        
         # Start notification service if available
         try:
             await notification_service.start()
@@ -220,6 +238,25 @@ async def lifespan(app: FastAPI):
             await realtime_service.stop()
         except Exception:
             logger.debug("Realtime service stop failed or not running")
+        
+        try:
+            from .services.free_market_data_service import free_market_data_service
+            from .services.free_websocket_service import free_websocket_service
+            
+            await free_market_data_service.stop()
+            await free_websocket_service.stop_service()
+        except Exception:
+            logger.debug("Free data services stop failed or not running")
+        
+        try:
+            from .services.professional_data_service import professional_data_service
+            from .services.realtime_websocket_service import realtime_websocket_service
+            
+            await professional_data_service.stop()
+            await realtime_websocket_service.stop_service()
+        except Exception:
+            logger.debug("Professional data services stop failed or not running")
+        
         try:
             await notification_service.stop()
         except Exception:

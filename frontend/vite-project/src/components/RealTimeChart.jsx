@@ -165,7 +165,7 @@ const RealTimeChart = ({
         }
     }, [symbol, assetType, period, interval]);
 
-    // Setup real-time updates
+    // Setup real-time updates using professional WebSocket
     const setupRealTimeUpdates = useCallback(() => {
         if (!symbol) return;
 
@@ -174,83 +174,87 @@ const RealTimeChart = ({
             wsRef.current.close();
         }
 
-        // Setup new WebSocket connection
+        // Setup new WebSocket connection to free endpoint (no API keys required)
         const wsUrl = `ws://localhost:8000/api/v1/streaming/market-data`;
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
-            console.log('WebSocket connected for', symbol);
-            // Subscribe to symbol updates
+            console.log('Free WebSocket connected for', symbol, '(no API keys required)');
+            // Subscribe to symbol updates using free protocol
             ws.send(JSON.stringify({
-
-
                 action: 'subscribe',
-                symbol: symbol,
-                asset_type: assetType
+                symbol: symbol.upper ? symbol.upper() : symbol.toUpperCase()
             }));
         };
 
         ws.onmessage = (event) => {
             try {
-                const raw = JSON.parse(event.data);
+                const data = JSON.parse(event.data);
+                console.log('WebSocket message:', data);
 
-                // Normalize common message types and field names so the chart responds
-                const msgType = raw.type || raw.messageType || '';
-                const incomingSymbol = raw.symbol || raw.ticker || (raw.payload && (raw.payload.symbol || raw.payload.ticker));
+                if (data.type === 'quote_update' && data.symbol === symbol.toUpperCase()) {
+                    const quote = data.data;
 
-                // Accept multiple server-side message types used across the app
-                if (['quote_update', 'price_update', 'ticker_update'].includes(msgType) && incomingSymbol === symbol) {
-                    // Normalize fields from different providers
-                    const price = raw.price ?? raw.quote?.price ?? raw.ticker?.price ?? raw.payload?.price ?? null;
-                    const change = raw.change ?? raw.quote?.change ?? raw.ticker?.change ?? raw.payload?.change ?? null;
-                    const change_pct = raw.change_percent ?? raw.quote?.change_percent ?? raw.ticker?.change_percent ?? raw.payload?.change_percent ?? null;
-                    const vol = raw.volume ?? raw.quote?.volume ?? raw.ticker?.volume ?? raw.payload?.volume ?? null;
-                    const ohlcv = raw.ohlcv ?? raw.payload?.ohlcv ?? raw.ticker?.ohlcv ?? null;
-                    const ts = raw.timestamp ?? raw.payload?.timestamp ?? Date.now();
+                    // Update current price display
+                    if (quote.price != null) {
+                        setCurrentPrice(quote.price);
+                    }
 
-                    // Update current price display if present
-                    if (price != null) setCurrentPrice(price);
-                    if (change != null || change_pct != null) {
+                    if (quote.change != null || quote.change_percent != null) {
                         setPriceChange({
-                            absolute: change ?? (price != null ? price - (candlestickSeriesRef.current?.lastValue?.close ?? price) : 0),
-                            percentage: change_pct ?? 0
+                            absolute: quote.change ?? 0,
+                            percentage: quote.change_percent ?? 0
                         });
                     }
-                    if (vol != null) setVolume(vol);
 
-                    // Add new candle/update if ohlcv provided
-                    if (ohlcv && candlestickSeriesRef.current) {
+                    if (quote.volume != null) {
+                        setVolume(quote.volume);
+                    }
+
+                    // Create OHLCV data for chart update
+                    if (quote.price && candlestickSeriesRef.current) {
+                        const now = new Date().getTime() / 1000;
                         const newCandle = {
-                            time: new Date(ts).getTime() / 1000,
-                            open: ohlcv.open,
-                            high: ohlcv.high,
-                            low: ohlcv.low,
-                            close: ohlcv.close,
+                            time: now,
+                            open: quote.open || quote.price,
+                            high: quote.high || quote.price,
+                            low: quote.low || quote.price,
+                            close: quote.price,
                         };
 
                         try {
                             candlestickSeriesRef.current.update(newCandle);
                         } catch (e) {
-                            // Some lightweight-charts builds throw when updating before setData; ignore
+                            console.debug('Chart update error (normal):', e);
                         }
 
-                        if (volumeSeriesRef.current && ohlcv.volume) {
+                        if (volumeSeriesRef.current && quote.volume) {
                             try {
                                 volumeSeriesRef.current.update({
-                                    time: newCandle.time,
-                                    value: ohlcv.volume,
-                                    color: ohlcv.close >= ohlcv.open ? '#4ade8080' : '#f8717180',
+                                    time: now,
+                                    value: quote.volume,
+                                    color: quote.price >= (quote.open || quote.price) ? '#4ade8080' : '#f8717180',
                                 });
                             } catch (e) {
-                                // ignore update errors
+                                console.debug('Volume update error (normal):', e);
                             }
                         }
                     }
 
-                    // Notify parent with raw message (preserve original shape)
+                    // Notify parent component
                     if (onDataUpdate) {
-                        onDataUpdate(raw);
+                        onDataUpdate(data);
                     }
+                }
+                else if (data.type === 'subscription_response') {
+                    console.log('Subscription response:', data);
+                }
+                else if (data.type === 'connection_established') {
+                    console.log('Connection established:', data.connection_id);
+                }
+                else if (data.type === 'error') {
+                    console.error('WebSocket error:', data.message);
+                    setError(data.message);
                 }
             } catch (err) {
                 console.error('Error processing WebSocket message:', err);
@@ -262,14 +266,14 @@ const RealTimeChart = ({
             setError('Real-time connection error');
         };
 
-        ws.onclose = () => {
-            console.log('WebSocket disconnected for', symbol);
-            // Attempt to reconnect after 5 seconds
+        ws.onclose = (event) => {
+            console.log('WebSocket disconnected for', symbol, 'Code:', event.code);
+            // Attempt to reconnect after 3 seconds
             setTimeout(() => {
                 if (symbol) {
                     setupRealTimeUpdates();
                 }
-            }, 5000);
+            }, 3000);
         };
 
         wsRef.current = ws;

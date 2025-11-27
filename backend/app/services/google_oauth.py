@@ -9,15 +9,15 @@ from google.auth.transport import requests
 from ..models.user import User, UserProfile
 import jwt
 from ..config import settings
+from ..database.repositories import UserRepository, UserProfileRepository
 
 logger = logging.getLogger(__name__)
-
 
 class GoogleOAuthService:
     """Google OAuth authentication and user management service"""
     
     def __init__(self):
-        # Prefer environment variables, fall back to loaded settings (pydantic Settings loads .env)
+        # Prefer environment variables, fall back to loaded settings
         self.google_client_id = os.getenv('GOOGLE_CLIENT_ID') or getattr(settings, 'GOOGLE_CLIENT_ID', None)
         self.google_client_secret = os.getenv('GOOGLE_CLIENT_SECRET') or getattr(settings, 'GOOGLE_CLIENT_SECRET', None)
         self.jwt_secret = os.getenv('JWT_SECRET', 'your-secret-key')
@@ -80,20 +80,19 @@ class GoogleOAuthService:
             jwt_token = self.generate_jwt_token(user)
             
             # Update last login
-            user.last_login = datetime.utcnow()
-            await self.update_user(user)
+            await UserRepository.update_last_login(str(user.id))
             
             return {
                 'success': True,
                 'token': jwt_token,
                 'user': {
-                    'id': user.id,
+                    'id': str(user.id),
                     'email': user.email,
                     'name': user.name,
                     'picture': user.picture,
                     'email_verified': user.email_verified,
-                    'created_at': user.created_at.isoformat(),
-                    'last_login': user.last_login.isoformat() if user.last_login else None
+                    'created_at': user.created_at.isoformat() if hasattr(user, 'created_at') and user.created_at else datetime.now().isoformat(),
+                    'last_login': datetime.utcnow().isoformat()
                 }
             }
             
@@ -108,53 +107,76 @@ class GoogleOAuthService:
         """Get existing user or create new user from Google info"""
         try:
             # Try to find existing user by Google ID or email
-            user = await self.find_user_by_google_id(google_user_info['google_id'])
+            user_data = await self.find_user_by_google_id(google_user_info['google_id'])
             
-            if not user:
-                user = await self.find_user_by_email(google_user_info['email'])
+            if not user_data:
+                user_data = await self.find_user_by_email(google_user_info['email'])
             
-            if user:
-                # Update existing user with latest Google info
-                user.google_id = google_user_info['google_id']
-                user.name = google_user_info['name']
-                user.picture = google_user_info['picture']
-                user.email_verified = google_user_info['email_verified']
-                user.updated_at = datetime.utcnow()
+            if user_data:
+                # Update existing user with latest Google info if needed
+                updates = {
+                    "google_id": google_user_info['google_id'],
+                    "name": google_user_info['name'],
+                    "picture": google_user_info['picture'],
+                    "email_verified": google_user_info['email_verified']
+                }
+                await UserRepository.update_user(str(user_data['id']), updates)
+                # Update user_data object to reflect changes
+                user_data.update(updates)
+                # Return as User object
+                return self._dict_to_user(user_data)
             else:
                 # Create new user
-                user = User(
-                    google_id=google_user_info['google_id'],
-                    email=google_user_info['email'],
-                    name=google_user_info['name'],
-                    given_name=google_user_info['given_name'],
-                    family_name=google_user_info['family_name'],
-                    picture=google_user_info['picture'],
-                    email_verified=google_user_info['email_verified'],
-                    locale=google_user_info['locale'],
-                    auth_provider='google',
-                    created_at=datetime.utcnow(),
-                    updated_at=datetime.utcnow()
-                )
+                user_dict = {
+                    "google_id": google_user_info['google_id'],
+                    "email": google_user_info['email'],
+                    "name": google_user_info['name'],
+                    "given_name": google_user_info.get('given_name'),
+                    "family_name": google_user_info.get('family_name'),
+                    "picture": google_user_info['picture'],
+                    "email_verified": google_user_info['email_verified'],
+                    "locale": google_user_info.get('locale'),
+                    "auth_provider": 'google'
+                }
                 
-                # Save new user
-                await self.save_user(user)
+                # Save new user to DB
+                created_user_data = await UserRepository.create_user(user_dict)
+                if not created_user_data:
+                    raise Exception("Failed to create user in database")
+                
+                user_obj = self._dict_to_user(created_user_data)
                 
                 # Create user profile
-                await self.create_user_profile(user)
-            
-            return user
+                await self.create_user_profile(user_obj)
+                
+                return user_obj
             
         except Exception as e:
             logger.error(f"Error getting/creating user: {e}")
             raise
     
+    def _dict_to_user(self, data: Dict[str, Any]) -> User:
+        """Helper to convert DB dict to User model (Pydantic/DataClass)"""
+        # Ensure compatible field types for the User model constructor
+        return User(
+            id=str(data['id']),
+            email=data['email'],
+            name=data.get('name') or data.get('username'), # Fallback
+            google_id=data.get('google_id'),
+            picture=data.get('picture') or data.get('avatar_url'),
+            email_verified=data.get('email_verified', False),
+            auth_provider=data.get('auth_provider', 'google'),
+            created_at=data.get('created_at', datetime.utcnow()),
+            updated_at=data.get('updated_at', datetime.utcnow())
+        )
+
     def generate_jwt_token(self, user: User) -> str:
         """Generate JWT token for authenticated user"""
         payload = {
-            'user_id': user.id,
+            'user_id': str(user.id),
             'email': user.email,
             'name': user.name,
-            'auth_provider': user.auth_provider,
+            'auth_provider': getattr(user, 'auth_provider', 'google'),
             'iat': datetime.utcnow(),
             'exp': datetime.utcnow() + timedelta(hours=self.token_expiry_hours)
         }
@@ -173,69 +195,50 @@ class GoogleOAuthService:
             logger.warning(f"Invalid JWT token: {e}")
             return None
     
-    async def find_user_by_google_id(self, google_id: str) -> Optional[User]:
-        """Find user by Google ID (placeholder - implement with your database)"""
-        # TODO: Implement database query
-        # For now, return None to create new users
-        return None
+    async def find_user_by_google_id(self, google_id: str) -> Optional[Dict[str, Any]]:
+        """Find user by Google ID"""
+        return await UserRepository.get_user_by_google_id(google_id)
     
-    async def find_user_by_email(self, email: str) -> Optional[User]:
-        """Find user by email (placeholder - implement with your database)"""
-        # TODO: Implement database query
-        return None
+    async def find_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        """Find user by email"""
+        return await UserRepository.get_user_by_email(email)
     
-    async def save_user(self, user: User) -> User:
-        """Save user to database (placeholder - implement with your database)"""
-        # TODO: Implement database save
-        # For now, assign a random ID
-        import uuid
-        user.id = str(uuid.uuid4())
-        logger.info(f"Created new user: {user.email}")
-        return user
-    
-    async def update_user(self, user: User) -> User:
-        """Update user in database (placeholder - implement with your database)"""
-        # TODO: Implement database update
-        logger.info(f"Updated user: {user.email}")
-        return user
-    
-    async def create_user_profile(self, user: User) -> UserProfile:
+    async def create_user_profile(self, user: User) -> Any:
         """Create initial user profile"""
-        profile = UserProfile(
-            user_id=user.id,
-            display_name=user.name,
-            bio="",
-            trading_experience="beginner",
-            risk_tolerance="moderate",
-            investment_goals=[],
-            preferred_assets=[],
-            notifications_enabled=True,
-            theme_preference="dark",
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
-        )
+        profile_data = {
+            "display_name": user.name,
+            "trading_experience": "beginner",
+            "risk_tolerance": "moderate",
+            "notifications_enabled": True,
+            "theme_preference": "dark"
+        }
         
-        # TODO: Save profile to database
+        profile = await UserProfileRepository.create_profile(str(user.id), profile_data)
         logger.info(f"Created profile for user: {user.email}")
         return profile
     
     async def get_user_profile(self, user_id: str) -> Optional[UserProfile]:
         """Get user profile by user ID"""
-        # TODO: Implement database query
-        # For now, return a basic profile
-        return UserProfile(
-            user_id=user_id,
-            display_name="User",
-            bio="Welcome to TradeFlowAI",
-            trading_experience="beginner",
-            risk_tolerance="moderate",
-            investment_goals=["long_term_growth"],
-            preferred_assets=["stocks", "crypto"],
-            notifications_enabled=True,
-            theme_preference="dark",
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
-        )
+        data = await UserProfileRepository.get_profile_by_user_id(user_id)
+        if data:
+            # Convert dict to UserProfile object
+            # Handle potential field mismatches
+            return UserProfile(
+                user_id=data['user_id'],
+                display_name=data.get('display_name', ''),
+                bio=data.get('bio', ''),
+                trading_experience=data.get('trading_experience', 'beginner'),
+                risk_tolerance=data.get('risk_tolerance', 'moderate'),
+                investment_goals=data.get('investment_goals', []),
+                preferred_assets=data.get('preferred_assets', []),
+                notifications_enabled=data.get('notifications_enabled', True),
+                theme_preference=data.get('theme_preference', 'dark'),
+                timezone=data.get('timezone', 'UTC'),
+                language=data.get('language', 'en'),
+                created_at=data['created_at'],
+                updated_at=data['updated_at']
+            )
+        return None
 
 # Global instance
 google_oauth_service = GoogleOAuthService()

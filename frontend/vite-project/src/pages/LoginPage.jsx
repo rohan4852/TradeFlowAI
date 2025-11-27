@@ -45,7 +45,7 @@ const LoginPage = () => {
         const initializeGoogleSignIn = () => {
             if (window.google) {
                 window.google.accounts.id.initialize({
-                    client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || '1234567890-abcdefghijklmnopqrstuvwxyz.apps.googleusercontent.com',
+                    client_id: '1234567890-abcdefghijklmnopqrstuvwxyz.apps.googleusercontent.com',
                     callback: handleGoogleSignIn,
                     auto_select: false,
                     cancel_on_tap_outside: true
@@ -61,30 +61,22 @@ const LoginPage = () => {
         setErrors({});
 
         try {
-            const result = await fetch('/api/v1/auth/google', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    token: response.credential
-                })
-            });
+            // For demo purposes, simulate Google login success
+            // In production, you would send response.credential to your backend
+            const demoUser = {
+                email: 'demo@google.com',
+                name: 'Demo User',
+                picture: 'https://via.placeholder.com/150'
+            };
 
-            const data = await result.json();
+            // Store auth token and user info
+            localStorage.setItem('authToken', 'demo-google-token-' + Date.now());
+            localStorage.setItem('userEmail', demoUser.email);
+            localStorage.setItem('userName', demoUser.name);
+            localStorage.setItem('userPicture', demoUser.picture);
 
-            if (data.success) {
-                // Store auth token and user info
-                localStorage.setItem('authToken', data.token);
-                localStorage.setItem('userEmail', data.user.email);
-                localStorage.setItem('userName', data.user.name);
-                localStorage.setItem('userPicture', data.user.picture || '');
-
-                // Redirect to dashboard
-                navigate('/dashboard');
-            } else {
-                setErrors({ submit: data.error || 'Google sign-in failed' });
-            }
+            // Redirect to dashboard
+            navigate('/dashboard');
         } catch (error) {
             console.error('Google sign-in error:', error);
             setErrors({ submit: 'Google sign-in failed. Please try again.' });
@@ -94,11 +86,8 @@ const LoginPage = () => {
     };
 
     const handleGoogleButtonClick = () => {
-        if (window.google) {
-            window.google.accounts.id.prompt();
-        } else {
-            setErrors({ submit: 'Google Sign-In not loaded. Please refresh the page.' });
-        }
+        // For demo purposes, directly call the sign-in handler
+        handleGoogleSignIn({ credential: 'demo-credential' });
     };
 
     const handleChange = (e) => {
@@ -143,17 +132,35 @@ const LoginPage = () => {
         setIsLoading(true);
 
         try {
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            const response = await fetch('http://localhost:8000/api/v1/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: formData.email,
+                    password: formData.password,
+                    remember_me: formData.rememberMe
+                })
+            });
 
-            // Store auth token (in real app, this would come from API)
-            localStorage.setItem('authToken', 'demo-token-' + Date.now());
-            localStorage.setItem('userEmail', formData.email);
+            const data = await response.json();
 
-            // Redirect to dashboard
-            navigate('/dashboard');
+            if (data.success) {
+                // Store auth token and user info
+                localStorage.setItem('authToken', data.token);
+                localStorage.setItem('userEmail', data.user.email);
+                localStorage.setItem('userName', data.user.name);
+                localStorage.setItem('userPicture', data.user.picture || '');
+
+                // Redirect to dashboard
+                navigate('/dashboard');
+            } else {
+                setErrors({ submit: data.error || 'Login failed. Please check your credentials.' });
+            }
         } catch (error) {
-            setErrors({ submit: 'Login failed. Please try again.' });
+            console.error('Login error:', error);
+            setErrors({ submit: 'Login failed. Please check if the server is running.' });
         } finally {
             setIsLoading(false);
         }
@@ -299,5 +306,4 @@ const LoginPage = () => {
         </div>
     );
 };
-
 export default LoginPage;

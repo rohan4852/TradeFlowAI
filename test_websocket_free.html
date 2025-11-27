@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Free WebSocket Test - No API Keys Required</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .panel {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #444;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+
+        .connected {
+            background-color: #1a5f1a;
+        }
+
+        .disconnected {
+            background-color: #5f1a1a;
+        }
+
+        .quote {
+            background: #333;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border-left: 4px solid #00d4ff;
+        }
+
+        .price {
+            font-size: 24px;
+            font-weight: bold;
+            color: #00d4ff;
+        }
+
+        .change.positive {
+            color: #4ade80;
+        }
+
+        .change.negative {
+            color: #f87171;
+        }
+
+        input,
+        button {
+            padding: 8px 12px;
+            margin: 5px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background: #333;
+            color: #fff;
+        }
+
+        button {
+            background: #00d4ff;
+            color: #000;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0099cc;
+        }
+
+        .log {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            padding: 10px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .badge {
+            background: #4ade80;
+            color: #000;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1>🆓 Free Real-Time Market Data Test</h1>
+        <div class="badge">NO API KEYS REQUIRED</div>
+        <p>Testing WebSocket connection to free market data service</p>
+    </div>
+
+    <div class="container">
+        <div class="panel">
+            <h2>Connection Control</h2>
+            <div id="status" class="status disconnected">Disconnected</div>
+
+            <div>
+                <input type="text" id="symbolInput" placeholder="Enter symbol (e.g., AAPL)" value="AAPL">
+                <button onclick="subscribe()">Subscribe</button>
+                <button onclick="unsubscribe()">Unsubscribe</button>
+            </div>
+
+            <div>
+                <button onclick="connect()">Connect</button>
+                <button onclick="disconnect()">Disconnect</button>
+                <button onclick="getQuote()">Get Quote</button>
+                <button onclick="clearLog()">Clear Log</button>
+            </div>
+
+            <h3>Active Subscriptions</h3>
+            <div id="subscriptions"></div>
+        </div>
+
+        <div class="panel">
+            <h2>Live Quotes</h2>
+            <div id="quotes"></div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>WebSocket Log</h2>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let subscriptions = new Set();
+
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateStatus(connected) {
+            const statusDiv = document.getElementById('status');
+            if (connected) {
+                statusDiv.textContent = 'Connected to Free WebSocket Service';
+                statusDiv.className = 'status connected';
+            } else {
+                statusDiv.textContent = 'Disconnected';
+                statusDiv.className = 'status disconnected';
+            }
+        }
+
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('Already connected');
+                return;
+            }
+
+            log('Connecting to free WebSocket service...');
+            ws = new WebSocket('ws://localhost:8000/api/v1/streaming/market-data');
+
+            ws.onopen = function (event) {
+                log('✅ Connected to free WebSocket service (no API keys required)');
+                updateStatus(true);
+            };
+
+            ws.onmessage = function (event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`📨 Received: ${JSON.stringify(data, null, 2)}`);
+
+                    if (data.type === 'quote_update') {
+                        updateQuote(data.symbol, data.data);
+                    } else if (data.type === 'connection_established') {
+                        log(`🔗 Connection established with ID: ${data.connection_id}`);
+                    } else if (data.type === 'subscription_response') {
+                        if (data.success) {
+                            log(`✅ ${data.action} ${data.symbol}: ${data.message}`);
+                            if (data.action === 'subscribe') {
+                                subscriptions.add(data.symbol);
+                            } else if (data.action === 'unsubscribe') {
+                                subscriptions.delete(data.symbol);
+                            }
+                            updateSubscriptionsList();
+                        } else {
+                            log(`❌ ${data.action} ${data.symbol}: ${data.message}`);
+                        }
+                    }
+                } catch (e) {
+                    log(`❌ Error parsing message: ${e.message}`);
+                }
+            };
+
+            ws.onclose = function (event) {
+                log(`🔌 WebSocket closed: ${event.code} - ${event.reason}`);
+                updateStatus(false);
+            };
+
+            ws.onerror = function (error) {
+                log(`❌ WebSocket error: ${error}`);
+                updateStatus(false);
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+                subscriptions.clear();
+                updateSubscriptionsList();
+                document.getElementById('quotes').innerHTML = '';
+            }
+        }
+
+        function subscribe() {
+            const symbol = document.getElementById('symbolInput').value.toUpperCase();
+            if (!symbol) {
+                alert('Please enter a symbol');
+                return;
+            }
+
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('Please connect first');
+                return;
+            }
+
+            log(`📡 Subscribing to ${symbol}...`);
+            ws.send(JSON.stringify({
+                action: 'subscribe',
+                symbol: symbol
+            }));
+        }
+
+        function unsubscribe() {
+            const symbol = document.getElementById('symbolInput').value.toUpperCase();
+            if (!symbol) {
+                alert('Please enter a symbol');
+                return;
+            }
+
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('Please connect first');
+                return;
+            }
+
+            log(`📡 Unsubscribing from ${symbol}...`);
+            ws.send(JSON.stringify({
+                action: 'unsubscribe',
+                symbol: symbol
+            }));
+        }
+
+        function getQuote() {
+            const symbol = document.getElementById('symbolInput').value.toUpperCase();
+            if (!symbol) {
+                alert('Please enter a symbol');
+                return;
+            }
+
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('Please connect first');
+                return;
+            }
+
+            log(`📊 Getting quote for ${symbol}...`);
+            ws.send(JSON.stringify({
+                action: 'get_quote',
+                symbol: symbol
+            }));
+        }
+
+        function updateQuote(symbol, quote) {
+            const quotesDiv = document.getElementById('quotes');
+            let quoteDiv = document.getElementById(`quote-${symbol}`);
+
+            if (!quoteDiv) {
+                quoteDiv = document.createElement('div');
+                quoteDiv.id = `quote-${symbol}`;
+                quoteDiv.className = 'quote';
+                quotesDiv.appendChild(quoteDiv);
+            }
+
+            const changeClass = quote.change >= 0 ? 'positive' : 'negative';
+            const changeSign = quote.change >= 0 ? '+' : '';
+
+            quoteDiv.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>${symbol}</strong>
+                        <div class="price">$${quote.price.toFixed(2)}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div class="change ${changeClass}">
+                            ${changeSign}${quote.change.toFixed(2)} (${changeSign}${quote.change_percent.toFixed(2)}%)
+                        </div>
+                        <div style="font-size: 12px; color: #888;">
+                            Vol: ${quote.volume.toLocaleString()}<br>
+                            Source: ${quote.source}<br>
+                            ${new Date(quote.timestamp).toLocaleTimeString()}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateSubscriptionsList() {
+            const subsDiv = document.getElementById('subscriptions');
+            if (subscriptions.size === 0) {
+                subsDiv.innerHTML = '<em>No active subscriptions</em>';
+            } else {
+                subsDiv.innerHTML = Array.from(subscriptions).map(symbol =>
+                    `<span style="background: #00d4ff; color: #000; padding: 2px 6px; border-radius: 3px; margin: 2px;">${symbol}</span>`
+                ).join(' ');
+            }
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // Auto-connect on page load
+        window.onload = function () {
+            updateStatus(false);
+            updateSubscriptionsList();
+            log('🆓 Free WebSocket Test Page Loaded - No API Keys Required!');
+            log('Click "Connect" to start testing the free market data service');
+        };
+    </script>
+</body>
+
+</html>

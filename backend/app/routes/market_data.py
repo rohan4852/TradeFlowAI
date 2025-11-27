@@ -4,6 +4,8 @@ from datetime import datetime
 from ..models.market_data import OHLCVData, NewsArticle, SocialSentiment, ESGScore
 from ..services.data_integration import MultiSourceDataIntegrator, NewsDataIntegrator, SentimentDataIntegrator
 from ..services.realtime_market_data import realtime_service, AssetType, RealTimeQuote
+from ..services.professional_data_service import professional_data_service
+from ..services.free_market_data_service import free_market_data_service
 import logging
 
 logger = logging.getLogger(__name__)
@@ -178,32 +180,35 @@ async def get_esg_score(ticker: str):
 @router.get("/realtime/quote/{symbol}")
 async def get_realtime_quote(
     symbol: str,
-    asset_type: AssetType = Query(AssetType.STOCK, description="Asset type"),
-    service = Depends(get_realtime_service)
+    asset_type: AssetType = Query(AssetType.STOCK, description="Asset type")
 ):
-    """Get real-time quote for any asset type"""
+    """Get real-time quote using completely free sources (no API keys required)"""
     try:
-        quote = await service.get_quote(symbol.upper(), asset_type)
+        # Use free market data service (no API keys needed)
+        quote = await free_market_data_service.get_quote(symbol.upper())
+        
         if not quote:
             raise HTTPException(status_code=404, detail=f"No quote found for {symbol}")
         
         return {
             "symbol": quote.symbol,
-            "asset_type": quote.asset_type,
+            "asset_type": asset_type,
             "price": quote.price,
             "change": quote.change,
             "change_percent": quote.change_percent,
             "volume": quote.volume,
             "bid": quote.bid,
             "ask": quote.ask,
-            "high_24h": quote.high_24h,
-            "low_24h": quote.low_24h,
+            "high_24h": quote.high,
+            "low_24h": quote.low,
             "open_price": quote.open_price,
             "previous_close": quote.previous_close,
-            "market_cap": quote.market_cap,
-            "timestamp": quote.timestamp,
-            "provider": quote.provider
+            "timestamp": quote.timestamp.isoformat(),
+            "provider": quote.source,
+            "status": "success",
+            "is_free_source": True
         }
+        
     except Exception as e:
         logger.error(f"Error fetching real-time quote for {symbol}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch quote: {str(e)}")
@@ -213,30 +218,28 @@ async def get_realtime_historical(
     symbol: str,
     asset_type: AssetType = Query(AssetType.STOCK, description="Asset type"),
     period: str = Query("1d", description="Time period"),
-    interval: str = Query("1m", description="Data interval"),
-    service = Depends(get_realtime_service)
+    interval: str = Query("1m", description="Data interval")
 ):
-    """Get historical data for real-time charting"""
+    """Get historical data for real-time charting using free sources"""
     try:
-        data = await service.get_historical_data(symbol.upper(), asset_type, period, interval)
+        # Use free market data service
+        data = await free_market_data_service.get_historical_data(symbol.upper(), period, interval)
+        
+        if not data:
+            raise HTTPException(status_code=404, detail=f"No historical data found for {symbol}")
         
         return {
             "symbol": symbol.upper(),
             "asset_type": asset_type,
             "period": period,
             "interval": interval,
-            "data": [
-                {
-                    "timestamp": item.timestamp.isoformat(),
-                    "open": item.open,
-                    "high": item.high,
-                    "low": item.low,
-                    "close": item.close,
-                    "volume": item.volume
-                }
-                for item in data
-            ]
+            "data": data,
+            "count": len(data),
+            "source": "free_service",
+            "status": "success",
+            "is_free_source": True
         }
+        
     except Exception as e:
         logger.error(f"Error fetching historical data for {symbol}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch historical data: {str(e)}")

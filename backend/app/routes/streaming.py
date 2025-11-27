@@ -5,6 +5,8 @@ import logging
 from ..services.streaming_engine import streaming_agent, live_prediction_agent, risk_monitoring_agent
 from ..services.security_agent import security_agent
 from ..services.realtime_market_data import realtime_service, AssetType
+from ..services.realtime_websocket_service import realtime_websocket_service
+from ..services.free_websocket_service import free_websocket_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -114,7 +116,9 @@ async def get_streaming_status():
             'streaming_tasks': list(streaming_agent.streaming_tasks.keys()),
             'live_predictions': list(live_prediction_agent.prediction_tasks.keys()),
             'risk_monitoring': list(risk_monitoring_agent.monitoring_tasks.keys()),
-            'realtime_market_data': realtime_service.get_market_status()
+            'realtime_market_data': realtime_service.get_market_status(),
+            'professional_service': realtime_websocket_service.get_service_status(),
+            'free_service': free_websocket_service.get_service_status()
         }
         return status
     except Exception as e:
@@ -122,140 +126,16 @@ async def get_streaming_status():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.websocket("/market-data")
-async def realtime_market_websocket(websocket: WebSocket):
-    """WebSocket endpoint for real-time market data"""
-    await websocket.accept()
-    
-    active_subscriptions = {}
-    
-    try:
-        while True:
-            try:
-                # Receive message from client
-                data = await websocket.receive_text()
-                message = json.loads(data)
-                
-                action = message.get('action')
-                symbol = message.get('symbol')
-                asset_type = message.get('asset_type', 'stock')
-                
-                if action == 'subscribe' and symbol:
-                    # Subscribe to real-time updates for this symbol
-                    def send_update(quote):
-                        try:
-                            update_data = {
-                                'type': 'quote_update',
-                                'symbol': quote.symbol,
-                                'asset_type': quote.asset_type,
-                                'price': quote.price,
-                                'change': quote.change,
-                                'change_percent': quote.change_percent,
-                                'volume': quote.volume,
-                                'bid': quote.bid,
-                                'ask': quote.ask,
-                                'high_24h': quote.high_24h,
-                                'low_24h': quote.low_24h,
-                                'timestamp': quote.timestamp.isoformat(),
-                                'provider': quote.provider
-                            }
-                            
-                            # Send via WebSocket (non-blocking)
-                            import asyncio
-                            asyncio.create_task(websocket.send_text(json.dumps(update_data)))
-                        except Exception as e:
-                            logger.error(f"Error sending WebSocket update: {e}")
-                    
-                    # Subscribe to the real-time service
-                    try:
-                        asset_type_enum = AssetType(asset_type)
-                        realtime_service.subscribe(symbol, asset_type_enum, send_update)
-                        active_subscriptions[symbol] = (asset_type_enum, send_update)
-                        
-                        # Send confirmation
-                        await websocket.send_text(json.dumps({
-                            'type': 'subscription_confirmed',
-                            'symbol': symbol,
-                            'asset_type': asset_type
-                        }))
-                        
-                        logger.info(f"WebSocket subscribed to {symbol} ({asset_type})")
-                        
-                    except ValueError:
-                        await websocket.send_text(json.dumps({
-                            'type': 'error',
-                            'message': f'Invalid asset type: {asset_type}'
-                        }))
-                
-                elif action == 'unsubscribe' and symbol:
-                    # Unsubscribe from updates
-                    if symbol in active_subscriptions:
-                        asset_type_enum, callback = active_subscriptions[symbol]
-                        realtime_service.unsubscribe(symbol, asset_type_enum, callback)
-                        del active_subscriptions[symbol]
-                        
-                        await websocket.send_text(json.dumps({
-                            'type': 'unsubscription_confirmed',
-                            'symbol': symbol
-                        }))
-                        
-                        logger.info(f"WebSocket unsubscribed from {symbol}")
-                
-                elif action == 'get_quote' and symbol:
-                    # Get current quote
-                    try:
-                        asset_type_enum = AssetType(asset_type)
-                        quote = await realtime_service.get_quote(symbol, asset_type_enum)
-                        
-                        if quote:
-                            quote_data = {
-                                'type': 'quote_response',
-                                'symbol': quote.symbol,
-                                'asset_type': quote.asset_type,
-                                'price': quote.price,
-                                'change': quote.change,
-                                'change_percent': quote.change_percent,
-                                'volume': quote.volume,
-                                'bid': quote.bid,
-                                'ask': quote.ask,
-                                'high_24h': quote.high_24h,
-                                'low_24h': quote.low_24h,
-                                'timestamp': quote.timestamp.isoformat(),
-                                'provider': quote.provider
-                            }
-                            await websocket.send_text(json.dumps(quote_data))
-                        else:
-                            await websocket.send_text(json.dumps({
-                                'type': 'error',
-                                'message': f'No quote available for {symbol}'
-                            }))
-                    except Exception as e:
-                        await websocket.send_text(json.dumps({
-                            'type': 'error',
-                            'message': f'Error fetching quote: {str(e)}'
-                        }))
-                
-            except WebSocketDisconnect:
-                break
-            except json.JSONDecodeError:
-                await websocket.send_text(json.dumps({
-                    'type': 'error',
-                    'message': 'Invalid JSON format'
-                }))
-            except Exception as e:
-                logger.error(f"WebSocket message processing error: {e}")
-                await websocket.send_text(json.dumps({
-                    'type': 'error',
-                    'message': 'Internal server error'
-                }))
-                
-    except WebSocketDisconnect:
-        logger.info("Real-time market data WebSocket disconnected")
-    except Exception as e:
-        logger.error(f"Real-time WebSocket error: {e}")
-    finally:
-        # Clean up subscriptions
-        for symbol, (asset_type_enum, callback) in active_subscriptions.items():
-            try:
-                realtime_service.unsubscribe(symbol, asset_type_enum, callback)
-            except Exception as e:
-                logger.error(f"Error unsubscribing from {symbol}: {e}")
+async def free_market_websocket(websocket: WebSocket):
+    """Free WebSocket endpoint for real-time market data (no API keys required)"""
+    await free_websocket_service.websocket_endpoint(websocket)
+
+@router.websocket("/free-data/{client_id}")
+async def free_websocket_endpoint(websocket: WebSocket, client_id: str):
+    """Free WebSocket endpoint with client ID (no API keys required)"""
+    await free_websocket_service.websocket_endpoint(websocket, client_id)
+
+@router.websocket("/professional-data/{client_id}")
+async def professional_websocket_endpoint(websocket: WebSocket, client_id: str):
+    """Professional WebSocket endpoint with client ID (requires API keys)"""
+    await realtime_websocket_service.websocket_endpoint(websocket, client_id)

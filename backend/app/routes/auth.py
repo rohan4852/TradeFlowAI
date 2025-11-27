@@ -6,7 +6,10 @@ from ..models.user import (
     GoogleAuthResponse, 
     UserResponse, 
     UserProfileResponse,
-    UpdateProfileRequest
+    UpdateProfileRequest,
+    LoginRequest,
+    LoginResponse,
+    RegisterRequest
 )
 from ..services.google_oauth import google_oauth_service
 
@@ -25,6 +28,109 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     
     return user_info
+
+@router.post("/login", response_model=LoginResponse)
+async def login(request: LoginRequest):
+    """Regular email/password login"""
+    try:
+        # For demo purposes, accept any email/password combination
+        # In production, you would verify against a database
+        if request.email and request.password and len(request.password) >= 6:
+            # Generate a simple JWT token (in production, use proper JWT)
+            import jwt
+            import time
+            
+            token_payload = {
+                'user_id': f"user_{hash(request.email)}",
+                'email': request.email,
+                'name': request.email.split('@')[0].title(),
+                'auth_provider': 'email',
+                'exp': int(time.time()) + (86400 * 7 if request.remember_me else 3600)  # 7 days or 1 hour
+            }
+            
+            # Use a simple secret (in production, use environment variable)
+            token = jwt.encode(token_payload, "demo-secret-key", algorithm="HS256")
+            
+            return LoginResponse(
+                success=True,
+                token=token,
+                user=UserResponse(
+                    id=token_payload['user_id'],
+                    email=request.email,
+                    name=token_payload['name'],
+                    picture="",
+                    email_verified=True,
+                    auth_provider='email',
+                    created_at="2024-01-01T00:00:00Z",
+                    last_login="2024-01-01T00:00:00Z"
+                )
+            )
+        else:
+            return LoginResponse(
+                success=False,
+                error="Invalid email or password"
+            )
+            
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        return LoginResponse(
+            success=False,
+            error="Login failed. Please try again."
+        )
+
+@router.post("/register", response_model=LoginResponse)
+async def register(request: RegisterRequest):
+    """User registration"""
+    try:
+        # Basic validation
+        if request.password != request.confirm_password:
+            return LoginResponse(
+                success=False,
+                error="Passwords do not match"
+            )
+        
+        if len(request.password) < 6:
+            return LoginResponse(
+                success=False,
+                error="Password must be at least 6 characters"
+            )
+        
+        # For demo purposes, accept any registration
+        # In production, you would save to database and send verification email
+        import jwt
+        import time
+        
+        token_payload = {
+            'user_id': f"user_{hash(request.email)}",
+            'email': request.email,
+            'name': request.name,
+            'auth_provider': 'email',
+            'exp': int(time.time()) + 3600  # 1 hour
+        }
+        
+        token = jwt.encode(token_payload, "demo-secret-key", algorithm="HS256")
+        
+        return LoginResponse(
+            success=True,
+            token=token,
+            user=UserResponse(
+                id=token_payload['user_id'],
+                email=request.email,
+                name=request.name,
+                picture="",
+                email_verified=False,
+                auth_provider='email',
+                created_at="2024-01-01T00:00:00Z",
+                last_login="2024-01-01T00:00:00Z"
+            )
+        )
+        
+    except Exception as e:
+        logger.error(f"Registration error: {e}")
+        return LoginResponse(
+            success=False,
+            error="Registration failed. Please try again."
+        )
 
 @router.post("/google", response_model=GoogleAuthResponse)
 async def google_auth(request: GoogleAuthRequest):

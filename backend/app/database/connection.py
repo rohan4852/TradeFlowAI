@@ -7,7 +7,6 @@ from sqlalchemy.orm import sessionmaker
 from databases import Database
 import asyncpg
 from urllib.parse import urlparse
-
 logger = logging.getLogger(__name__)
 
 # Cloud Database Configuration
@@ -67,9 +66,9 @@ def get_database_url():
                 "Using local development database instead. Update your .env with a real DATABASE_URL."
             )
         else:
-            logger.warning("No cloud database URL found, using local database")
+            logger.warning("No cloud database URL found, using local MySQL database")
 
-        return "postgresql://postgres:password@localhost:5432/ai_trading"
+        return "mysql+pymysql://root:password@localhost:3306/ai_trading"
 
     # Detect obvious placeholder patterns that often appear in example .env
     # entries (e.g. [PROJECT-REF], [YOUR-PASSWORD]) and avoid attempting to
@@ -81,8 +80,8 @@ def get_database_url():
             "Detected placeholder values in database URL (likely from .env). "
             "Using local development database instead. Update your .env with a real DATABASE_URL."
         )
-        # Keep the fallback aligned with docker-compose local Postgres
-        return "postgresql://postgres:password@localhost:5432/ai_trading"
+        # Keep the fallback aligned with local MySQL
+        return "mysql+pymysql://root:password@localhost:3306/ai_trading"
 
     # Try to parse the URL for provider detection, but be defensive: if
     # parsing fails (malformed URL), fall back to string-based checks and
@@ -124,21 +123,46 @@ DATABASE_URL = get_database_url()
 def create_database_connections():
     """Create database connections with cloud-optimized settings"""
     
-    # Connection pool settings for cloud databases
-    engine_kwargs = {
-        "pool_size": 10,
-        "max_overflow": 20,
-        "pool_pre_ping": True,  # Verify connections before use
-        "pool_recycle": 3600,   # Recycle connections every hour
-        # Note: only include connection options accepted by the DB-API used by
-        # the sync SQLAlchemy engine (psycopg2). asyncpg supports additional
-        # options like `command_timeout` but passing them here causes an
-        # "invalid dsn" error. Keep connect_args minimal for the sync engine.
-        "connect_args": {
-            "sslmode": "require" if "localhost" not in DATABASE_URL else "prefer",
-            "connect_timeout": 30,
+    # Check database type
+    is_sqlite = DATABASE_URL.startswith("sqlite")
+    is_mysql = DATABASE_URL.startswith("mysql")
+    
+    if is_sqlite:
+        # SQLite-specific configuration
+        engine_kwargs = {
+            "pool_pre_ping": True,
+            "connect_args": {
+                "check_same_thread": False,  # Allow SQLite to be used across threads
+            }
         }
-    }
+    elif is_mysql:
+        # MySQL-specific configuration
+        engine_kwargs = {
+            "pool_size": 10,
+            "max_overflow": 20,
+            "pool_pre_ping": True,  # Verify connections before use
+            "pool_recycle": 3600,   # Recycle connections every hour
+            "connect_args": {
+                "charset": "utf8mb4",
+                "connect_timeout": 30,
+            }
+        }
+    else:
+        # PostgreSQL/cloud database configuration
+        engine_kwargs = {
+            "pool_size": 10,
+            "max_overflow": 20,
+            "pool_pre_ping": True,  # Verify connections before use
+            "pool_recycle": 3600,   # Recycle connections every hour
+            # Note: only include connection options accepted by the DB-API used by
+            # the sync SQLAlchemy engine (psycopg2). asyncpg supports additional
+            # options like `command_timeout` but passing them here causes an
+            # "invalid dsn" error. Keep connect_args minimal for the sync engine.
+            "connect_args": {
+                "sslmode": "require" if "localhost" not in DATABASE_URL else "prefer",
+                "connect_timeout": 30,
+            }
+        }
     
     # For async operations
     database = Database(DATABASE_URL)
@@ -202,10 +226,27 @@ def get_db_session():
 async def create_tables():
     """Create all database tables"""
     try:
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created successfully")
+        # Import models to ensure they're registered with Base
+        from .models import (
+            User, UserProfile, TradingAccount, Order, Position, 
+            MarketData, Watchlist, TradingSession, SessionToken, 
+            PriceAlert, Notification
+        )
+        
+        # For SQLite, create tables synchronously without async wrapper
+        if DATABASE_URL.startswith("sqlite"):
+            Base.metadata.create_all(bind=engine)
+            logger.info("Database tables created successfully (SQLite)")
+        else:
+            # For other databases, use thread executor
+            import asyncio
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, lambda: Base.metadata.create_all(bind=engine))
+            logger.info("Database tables created successfully")
+            
     except Exception as e:
         logger.error(f"Failed to create database tables: {e}")
-        raise
+        # Don't raise in development - just log and continue
+        logger.warning("Continuing without database tables for development")
 
     

@@ -10,7 +10,7 @@ export default function Chart({ symbol = 'AAPL' }) {
     const fetchData = async () => {
       try {
         setLoading(true)
-        const response = await fetch(`http://localhost:8000/api/market-data/ohlcv/${symbol}?period=1mo&interval=1d`)
+        const response = await fetch(`http://localhost:8000/api/v1/market/ohlcv/${symbol}?period=1mo&interval=1d`)
         if (!response.ok) {
           throw new Error('Failed to fetch chart data')
         }

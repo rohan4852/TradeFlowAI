@@ -219,3 +219,48 @@ class TradingSession(Base):
     
     # Session data
     session_data = Column(JSON, default=dict)
+
+class SessionToken(Base):
+    """Session tokens for authentication"""
+    __tablename__ = "session_tokens"
+    
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id"))
+    token_hash = Column(String, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used = Column(DateTime, default=datetime.utcnow)
+
+class PriceAlert(Base):
+    """Price alerts for users"""
+    __tablename__ = "price_alerts"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    symbol = Column(String, nullable=False, index=True)
+    alert_type = Column(String, nullable=False)  # above, below, change_percent
+    target_price = Column(Float, nullable=False)
+    current_price = Column(Float, nullable=True)
+    is_active = Column(Boolean, default=True)
+    is_triggered = Column(Boolean, default=False)
+    triggered_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class Notification(Base):
+    """User notifications"""
+    __tablename__ = "notifications"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    notification_type = Column(String, nullable=False)  # alert, trade, system, etc.
+    is_read = Column(Boolean, default=False)
+    priority = Column(String, default="normal")  # low, normal, high, urgent
+    data = Column(JSON, default=dict)  # Additional notification data
+    created_at = Column(DateTime, default=datetime.utcnow)
+    read_at = Column(DateTime, nullable=True)

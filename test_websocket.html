@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <h1>WebSocket Connection Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="messages"></div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+
+        // Test market-data WebSocket
+        const ws = new WebSocket('ws://localhost:8000/api/v1/streaming/market-data');
+
+        ws.onopen = function() {
+            statusDiv.innerHTML = 'Connected to market-data WebSocket';
+            console.log('WebSocket connected');
+            
+            // Subscribe to AAPL
+            ws.send(JSON.stringify({
+                action: 'subscribe',
+                symbol: 'AAPL',
+                asset_type: 'stock'
+            }));
+        };
+
+        ws.onmessage = function(event) {
+            console.log('Received:', event.data);
+            const message = document.createElement('div');
+            message.textContent = `${new Date().toLocaleTimeString()}: ${event.data}`;
+            messagesDiv.appendChild(message);
+        };
+
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+            statusDiv.innerHTML = 'WebSocket error: ' + error;
+        };
+
+        ws.onclose = function() {
+            console.log('WebSocket closed');
+            statusDiv.innerHTML = 'WebSocket closed';
+        };
+    </script>
+</body>
+</html>

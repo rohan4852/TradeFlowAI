@@ -1,19 +1,20 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
+  # MySQL Database
   db:
-    image: postgres:15
+    image: mysql:8.0
     environment:
-      POSTGRES_DB: ai_trading
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      MYSQL_DATABASE: ai_trading
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_USER: trading_user
+      MYSQL_PASSWORD: password
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     ports:
-      - "5432:5432"
+      - "3306:3306"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -37,7 +38,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:password@db:5432/ai_trading
+      - DATABASE_URL=mysql+aiomysql://root:password@db:3306/ai_trading
       - REDIS_URL=redis://redis:6379
       - ENVIRONMENT=development
       - DEBUG=true
@@ -75,7 +76,7 @@ services:
       - ./data:/app/data
       - ./models:/app/models
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:password@db:5432/ai_trading
+      - DATABASE_URL=mysql+aiomysql://root:password@db:3306/ai_trading
       - REDIS_URL=redis://redis:6379
     depends_on:
       - db
@@ -84,5 +85,5 @@ services:
       - training
 
 volumes:
-  postgres_data:
+  mysql_data:
   redis_data:

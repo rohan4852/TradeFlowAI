@@ -160,7 +160,7 @@ export default function App() {
             {!isLoading && (
               <Router>
                 <RealTimeDataProvider
-                  wsUrl="ws://localhost:8000/api/v1/streaming/ws"
+                  wsUrl={`ws://localhost:8000/api/v1/streaming/ws/client_${Date.now()}?subscriptions=market_overview,social_sentiment`}
                   autoConnect={true}
                   debug={process.env.NODE_ENV === 'development'}
                 >
