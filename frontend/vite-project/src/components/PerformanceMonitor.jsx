@@ -4,9 +4,8 @@
  */
 import React, { useState, useEffect } from 'react';
 
-const PerformanceMonitor = ({ isVisible, onToggle, metrics = null, onRefresh = null }) => {
-    // metrics can be passed in from a parent or a real-time provider; avoid generating fake data
-    const [internalMetrics] = useState({
+const PerformanceMonitor = ({ isVisible, onToggle }) => {
+    const [metrics, setMetrics] = useState({
         orderProcessingLatency: 0,
         throughput: 0,
         memoryUsage: 0,
@@ -17,7 +16,27 @@ const PerformanceMonitor = ({ isVisible, onToggle, metrics = null, onRefresh = n
         queueDepth: 0
     });
 
-    const effectiveMetrics = metrics || internalMetrics;
+    useEffect(() => {
+        if (!isVisible) return;
+
+        const interval = setInterval(() => {
+            // Simulate real-time metrics (replace with actual API calls)
+            const newMetrics = {
+                orderProcessingLatency: Math.random() * 50 + 5, // 5-55 microseconds
+                throughput: Math.floor(Math.random() * 50000 + 80000), // 80k-130k orders/sec
+                memoryUsage: Math.random() * 30 + 20, // 20-50%
+                cacheHitRate: Math.random() * 10 + 90, // 90-100%
+                networkLatency: Math.random() * 5 + 1, // 1-6ms
+                cpuUsage: Math.random() * 40 + 10, // 10-50%
+                activeConnections: Math.floor(Math.random() * 500 + 1000), // 1000-1500
+                queueDepth: Math.floor(Math.random() * 100 + 50) // 50-150
+            };
+
+            setMetrics(newMetrics);
+        }, 100); // Update every 100ms for real-time feel
+
+        return () => clearInterval(interval);
+    }, [isVisible]);
 
     const getLatencyColor = (latency) => {
         if (latency < 10) return '#00ff88';

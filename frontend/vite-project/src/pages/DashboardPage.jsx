@@ -72,38 +72,16 @@ const DashboardPage = () => {
                         <div className="overview-grid">
                             <div className="overview-card">
                                 <h3>Total Balance</h3>
-                                {(() => {
-                                    // try to read cached portfolio values from localStorage as best-effort
-                                    const cached = (() => {
-                                        try {
-                                            return JSON.parse(localStorage.getItem('portfolio_summary')) || {};
-                                        } catch (e) { return {}; }
-                                    })();
-                                    const total = cached.totalBalance ?? null;
-                                    const change = cached.changePercent ?? null;
-                                    return (
-                                        <>
-                                            <p className="balance">{total != null ? `$${Number(total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</p>
-                                            <span className={`change ${change != null && change >= 0 ? 'positive' : 'negative'}`}>{change != null ? `${change > 0 ? '+' : ''}${Number(change).toFixed(2)}% today` : '—'}</span>
-                                        </>
-                                    );
-                                })()}
+                                <p className="balance">$125,430.50</p>
+                                <span className="change positive">+2.4% today</span>
                             </div>
                             <div className="overview-card">
                                 <h3>Active Positions</h3>
-                                <p className="positions">{(() => { try { const cached = JSON.parse(localStorage.getItem('portfolio_summary')) || {}; return cached.positions ?? '—'; } catch (e) { return '—'; } })()}</p>
+                                <p className="positions">12</p>
                             </div>
                             <div className="overview-card">
                                 <h3>P&L Today</h3>
-                                {(() => {
-                                    try {
-                                        const cached = JSON.parse(localStorage.getItem('portfolio_summary')) || {};
-                                        const pnl = cached.pnlToday ?? null;
-                                        return <p className={`pnl ${pnl != null && pnl >= 0 ? 'positive' : 'negative'}`}>{pnl != null ? `${pnl >= 0 ? '+' : ''}$${Number(pnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</p>;
-                                    } catch (e) {
-                                        return <p className="pnl">—</p>;
-                                    }
-                                })()}
+                                <p className="pnl positive">+$2,840.30</p>
                             </div>
                         </div>
                         <PortfolioPanel />

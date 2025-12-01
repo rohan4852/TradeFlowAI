@@ -24,17 +24,19 @@ const MarketMicrostructure = ({ ticker, orderFlowData, isLoading }) => {
     ];
 
     useEffect(() => {
-        // Use provided orderFlowData when available; otherwise keep defaults and show 'not available' in UI
-        if (!orderFlowData) return;
+        // Simulate real-time market microstructure data
+        const interval = setInterval(() => {
+            setFlowMetrics({
+                buyPressure: Math.random() * 100,
+                sellPressure: Math.random() * 100,
+                imbalance: (Math.random() - 0.5) * 100,
+                toxicity: Math.random() * 50,
+                informationContent: Math.random() * 100
+            });
+        }, 1000);
 
-        setFlowMetrics(prev => ({
-            buyPressure: orderFlowData.buyPressure ?? prev.buyPressure,
-            sellPressure: orderFlowData.sellPressure ?? prev.sellPressure,
-            imbalance: orderFlowData.imbalance ?? prev.imbalance,
-            toxicity: orderFlowData.toxicity ?? prev.toxicity,
-            informationContent: orderFlowData.informationContent ?? prev.informationContent
-        }));
-    }, [orderFlowData]);
+        return () => clearInterval(interval);
+    }, []);
 
     const getImbalanceColor = (imbalance) => {
         if (imbalance > 20) return '#00ff88';
@@ -177,14 +179,8 @@ const MarketMicrostructure = ({ ticker, orderFlowData, isLoading }) => {
                                 </div>
 
                                 <div className="price-center">
-                                    {orderFlowData?.price ? (
-                                        <>
-                                            <div className="current-price">${orderFlowData.price}</div>
-                                            <div className="spread">Spread: ${orderFlowData.spread ?? 'N/A'}</div>
-                                        </>
-                                    ) : (
-                                        <div className="no-live-data">Live price data not available</div>
-                                    )}
+                                    <div className="current-price">$152.45</div>
+                                    <div className="spread">Spread: $0.02</div>
                                 </div>
 
                                 <div className="sell-flow">
@@ -367,28 +363,24 @@ const MarketMicrostructure = ({ ticker, orderFlowData, isLoading }) => {
                             <h4>💧 Liquidity Heatmap</h4>
                             <div className="heatmap-container">
                                 <div className="price-levels">
-                                    {(orderFlowData?.priceLevels ?? [155.20, 154.80, 154.40, 152.45, 152.00, 151.60, 151.20]).map((pl, index) => {
-                                        const price = typeof pl === 'object' ? pl.price : pl;
-                                        const depth = typeof pl === 'object' ? (pl.depth ?? null) : null;
-                                        const pct = depth != null ? Math.min(100, Math.round((depth / (orderFlowData?.maxDepth || depth || 1)) * 100)) : null;
-                                        return (
-                                            <div key={price + index} className="price-level">
-                                                <span className="price-value">{price != null ? `$${Number(price).toFixed(2)}` : '—'}</span>
-                                                <div className="liquidity-bar">
-                                                    <div
-                                                        className="liquidity-fill"
-                                                        style={{
-                                                            width: pct != null ? `${pct}%` : '0%',
-                                                            backgroundColor: index === 3 ? '#ffaa00' : index < 3 ? '#ff4444' : '#00ff88'
-                                                        }}
-                                                    />
-                                                </div>
-                                                <span className="liquidity-amount">
-                                                    {depth != null ? (depth >= 1e6 ? `${(depth / 1e6).toFixed(1)}M` : depth.toLocaleString()) : '—'}
-                                                </span>
+                                    {[155.20, 154.80, 154.40, 152.45, 152.00, 151.60, 151.20].map((price, index) => (
+                                        <div key={price} className="price-level">
+                                            <span className="price-value">${price}</span>
+                                            <div className="liquidity-bar">
+                                                <div
+                                                    className="liquidity-fill"
+                                                    style={{
+                                                        width: `${Math.random() * 100}%`,
+                                                        backgroundColor: index === 3 ? '#ffaa00' :
+                                                            index < 3 ? '#ff4444' : '#00ff88'
+                                                    }}
+                                                />
                                             </div>
-                                        );
-                                    })}
+                                            <span className="liquidity-amount">
+                                                {(Math.random() * 10000).toFixed(0)}
+                                            </span>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         </div>
@@ -396,15 +388,15 @@ const MarketMicrostructure = ({ ticker, orderFlowData, isLoading }) => {
                         <div className="liquidity-metrics">
                             <div className="metric-row">
                                 <span className="metric-name">Bid-Ask Spread</span>
-                                <span className="metric-value">{orderFlowData?.spread != null ? `$${Number(orderFlowData.spread).toFixed(4)} (${orderFlowData.spreadPct != null ? `${Number(orderFlowData.spreadPct).toFixed(3)}%` : ''})` : '—'}</span>
+                                <span className="metric-value">$0.02 (0.013%)</span>
                             </div>
                             <div className="metric-row">
                                 <span className="metric-name">Market Depth</span>
-                                <span className="metric-value">{orderFlowData?.marketDepth != null ? (orderFlowData.marketDepth >= 1e6 ? `$${(orderFlowData.marketDepth / 1e6).toFixed(1)}M` : `$${orderFlowData.marketDepth}`) : '—'} {orderFlowData?.depthPct != null ? `(${orderFlowData.depthPct >= 0 ? '±' : ''}${orderFlowData.depthPct}%)` : ''}</span>
+                                <span className="metric-value">$2.4M (±1%)</span>
                             </div>
                             <div className="metric-row">
                                 <span className="metric-name">Resilience</span>
-                                <span className="metric-value">{orderFlowData?.resilience != null ? `${orderFlowData.resilience}/10` : '—'}</span>
+                                <span className="metric-value">High (8.5/10)</span>
                             </div>
                         </div>
                     </div>

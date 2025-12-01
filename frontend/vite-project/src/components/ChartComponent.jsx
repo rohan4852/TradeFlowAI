@@ -27,18 +27,10 @@ const ChartComponent = ({
                     <div className="chart-placeholder">
                         <div className="chart-info">
                             <p>📈 Chart for {ticker}</p>
-                            {data ? (
-                                <p>Historical data points: {Array.isArray(data) ? data.length : 'N/A'}</p>
-                            ) : (
-                                <p className="no-live-data">Historical data not available</p>
-                            )}
-                            {realTimeData ? (
-                                <p>Real-time: Connected</p>
-                            ) : (
-                                <p className="no-live-data">Live streaming not available</p>
-                            )}
+                            {data && <p>Historical data points: {data.length || 'N/A'}</p>}
+                            {realTimeData && <p>Real-time: Connected</p>}
                         </div>
-                        <Chart symbol={ticker} data={data} realTime={realTimeData} />
+                        <Chart symbol={ticker} />
                     </div>
                 )}
             </div>

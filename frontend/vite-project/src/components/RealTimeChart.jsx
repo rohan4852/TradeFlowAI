@@ -165,7 +165,7 @@ const RealTimeChart = ({
         }
     }, [symbol, assetType, period, interval]);
 
-    // Setup real-time updates using professional WebSocket
+    // Setup real-time updates
     const setupRealTimeUpdates = useCallback(() => {
         if (!symbol) return;
 
@@ -174,70 +174,51 @@ const RealTimeChart = ({
             wsRef.current.close();
         }
 
-        // Setup new WebSocket connection to free endpoint (no API keys required)
+        // Setup new WebSocket connection
         const wsUrl = `ws://localhost:8000/api/v1/streaming/market-data`;
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
-            console.log('Free WebSocket connected for', symbol, '(no API keys required)');
-            // Subscribe to symbol updates using free protocol
+            console.log('WebSocket connected for', symbol);
+            // Subscribe to symbol updates
             ws.send(JSON.stringify({
                 action: 'subscribe',
-                symbol: symbol.upper ? symbol.upper() : symbol.toUpperCase()
+                symbol: symbol,
+                asset_type: assetType
             }));
         };
 
         ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                console.log('WebSocket message:', data);
 
-                if (data.type === 'quote_update' && data.symbol === symbol.toUpperCase()) {
-                    const quote = data.data;
-
+                if (data.type === 'quote_update' && data.symbol === symbol) {
                     // Update current price display
-                    if (quote.price != null) {
-                        setCurrentPrice(quote.price);
-                    }
+                    setCurrentPrice(data.price);
+                    setPriceChange({
+                        absolute: data.change,
+                        percentage: data.change_percent
+                    });
+                    setVolume(data.volume);
 
-                    if (quote.change != null || quote.change_percent != null) {
-                        setPriceChange({
-                            absolute: quote.change ?? 0,
-                            percentage: quote.change_percent ?? 0
-                        });
-                    }
-
-                    if (quote.volume != null) {
-                        setVolume(quote.volume);
-                    }
-
-                    // Create OHLCV data for chart update
-                    if (quote.price && candlestickSeriesRef.current) {
-                        const now = new Date().getTime() / 1000;
+                    // Add new data point to chart if it's a new candle
+                    if (data.ohlcv && candlestickSeriesRef.current) {
                         const newCandle = {
-                            time: now,
-                            open: quote.open || quote.price,
-                            high: quote.high || quote.price,
-                            low: quote.low || quote.price,
-                            close: quote.price,
+                            time: new Date(data.timestamp).getTime() / 1000,
+                            open: data.ohlcv.open,
+                            high: data.ohlcv.high,
+                            low: data.ohlcv.low,
+                            close: data.ohlcv.close,
                         };
 
-                        try {
-                            candlestickSeriesRef.current.update(newCandle);
-                        } catch (e) {
-                            console.debug('Chart update error (normal):', e);
-                        }
+                        candlestickSeriesRef.current.update(newCandle);
 
-                        if (volumeSeriesRef.current && quote.volume) {
-                            try {
-                                volumeSeriesRef.current.update({
-                                    time: now,
-                                    value: quote.volume,
-                                    color: quote.price >= (quote.open || quote.price) ? '#4ade8080' : '#f8717180',
-                                });
-                            } catch (e) {
-                                console.debug('Volume update error (normal):', e);
-                            }
+                        if (volumeSeriesRef.current && data.ohlcv.volume) {
+                            volumeSeriesRef.current.update({
+                                time: newCandle.time,
+                                value: data.ohlcv.volume,
+                                color: data.ohlcv.close >= data.ohlcv.open ? '#4ade8080' : '#f8717180',
+                            });
                         }
                     }
 
@@ -245,16 +226,6 @@ const RealTimeChart = ({
                     if (onDataUpdate) {
                         onDataUpdate(data);
                     }
-                }
-                else if (data.type === 'subscription_response') {
-                    console.log('Subscription response:', data);
-                }
-                else if (data.type === 'connection_established') {
-                    console.log('Connection established:', data.connection_id);
-                }
-                else if (data.type === 'error') {
-                    console.error('WebSocket error:', data.message);
-                    setError(data.message);
                 }
             } catch (err) {
                 console.error('Error processing WebSocket message:', err);
@@ -266,14 +237,14 @@ const RealTimeChart = ({
             setError('Real-time connection error');
         };
 
-        ws.onclose = (event) => {
-            console.log('WebSocket disconnected for', symbol, 'Code:', event.code);
-            // Attempt to reconnect after 3 seconds
+        ws.onclose = () => {
+            console.log('WebSocket disconnected for', symbol);
+            // Attempt to reconnect after 5 seconds
             setTimeout(() => {
                 if (symbol) {
                     setupRealTimeUpdates();
                 }
-            }, 3000);
+            }, 5000);
         };
 
         wsRef.current = ws;

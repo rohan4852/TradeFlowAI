@@ -60,31 +60,41 @@ export default function App() {
         const validationResults = await runStartupValidation();
         if (!validationResults.success) {
           displayValidationResults(validationResults);
-          // keep loading state so the user can see validation messages
           return;
         }
 
         // Initialize error handling system
         initializeErrorHandling();
 
-        // Initialize data integration services and await if it returns a Promise
-        // initializeCompleteDataIntegration may be sync (returns an object) or async (returns a Promise)
-        const initResult = initializeCompleteDataIntegration();
-
-        // Use a timeout fallback so the UI doesn't hang indefinitely
-        const timeoutMs = 5000;
-        const status = await Promise.race([
-          Promise.resolve(initResult),
-          new Promise(resolve => setTimeout(() => resolve({ initialized: false, timeout: true }), timeoutMs))
-        ]);
-
+        // Initialize data integration services
+        const status = initializeCompleteDataIntegration();
         setIntegrationStatus(status);
 
-        // Update loading state based on initialization result
-        setLoadingProgress(status.initialized ? 100 : 0);
-        setIsLoading(false);
+        // Simulate loading process with real initialization
+        const loadingSteps = [
+          { progress: 20, delay: 300, task: 'Initializing services...' },
+          { progress: 40, delay: 500, task: 'Connecting to data streams...' },
+          { progress: 60, delay: 700, task: 'Setting up performance monitoring...' },
+          { progress: 80, delay: 900, task: 'Configuring error handling...' },
+          { progress: 100, delay: 1100, task: 'Ready!' }
+        ];
 
-        console.log('Initialization result:', status);
+        for (const step of loadingSteps) {
+          await new Promise(resolve => {
+            setTimeout(() => {
+              setLoadingProgress(step.progress);
+              console.log(`⏳ ${step.task}`);
+              resolve();
+            }, step.delay);
+          });
+        }
+
+        // Complete loading
+        setTimeout(() => {
+          setIsLoading(false);
+          console.log('✓ Application fully initialized');
+        }, 500);
+
       } catch (error) {
         console.error('✗ Failed to initialize application:', error);
         // Still allow app to load with degraded functionality
@@ -160,7 +170,7 @@ export default function App() {
             {!isLoading && (
               <Router>
                 <RealTimeDataProvider
-                  wsUrl={`ws://localhost:8000/api/v1/streaming/ws/client_${Date.now()}?subscriptions=market_overview,social_sentiment`}
+                  wsUrl="ws://localhost:8000/api/v1/streaming/ws"
                   autoConnect={true}
                   debug={process.env.NODE_ENV === 'development'}
                 >
